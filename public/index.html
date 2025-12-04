@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bach Generator</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            padding: 2rem;
+            background: #f4f4f9;
+            color: #333;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 2rem;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+            text-align: center;
+        }
+
+        h1 {
+            margin-bottom: 2rem;
+            font-weight: 300;
+            letter-spacing: 1px;
+        }
+
+        button {
+            padding: 12px 24px;
+            font-size: 1.1rem;
+            cursor: pointer;
+            background: #2c3e50;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            transition: background 0.2s;
+        }
+
+        button:hover {
+            background: #34495e;
+        }
+
+        #status {
+            margin-top: 2rem;
+            color: #7f8c8d;
+            font-style: italic;
+        }
+
+        .controls {
+            margin-bottom: 2rem;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>Bach-Style Generator</h1>
+        <div class="controls">
+            <select id="formSelect"
+                style="padding: 12px; font-size: 1.1rem; border-radius: 6px; border: 1px solid #ccc; margin-right: 10px;">
+                <option value="Chorale">Chorale</option>
+                <option value="Prelude">Prelude</option>
+                <option value="Fugue">Fugue</option>
+            </select>
+            <button id="playBtn">Generate & Play</button>
+        </div>
+        <div id="status">Ready (Click to start audio context)</div>
+    </div>
+    <script src="player.js"></script>
+</body>
+
+</html>
