@@ -1,3 +1,4 @@
+const { Interval } = require('tonal');
 const Motif = require('./motif');
 const Structure = require('./structure');
 const Modulator = require('./modulator');
@@ -14,9 +15,10 @@ class Planner {
 
   generate(options = {}) {
     const form = options.form || 'Chorale';
+    const duration = options.duration || 2;
 
     // 1. Define Structure
-    const sections = this.structure.generate(form);
+    const sections = this.structure.generate(form, duration);
 
     // 2. Plan Modulation
     const keyPlan = this.modulator.plan(sections);
@@ -68,6 +70,29 @@ class Planner {
     const length = section.bars;
     const seed = Date.now().toString() + section.name; // Unique seed per section
 
+    // Transform Motif based on section type
+    let activeMotif = motif;
+    if (section.type === 'Development' || section.name.includes('Episode')) {
+      activeMotif = activeMotif.invert();
+    }
+    if (section.type === 'Variation') {
+      activeMotif = activeMotif.mutate();
+    }
+    if (section.type === 'Recapitulation') {
+      // Keep original or maybe retrograde? Let's keep original for recognition.
+    }
+
+    // Transpose Motif to current key
+    // Assuming motif is in C4 roughly.
+    // Calculate interval from C to current key.
+    // This is a simplification; ideally we'd know the motif's original key.
+    try {
+      const interval = Interval.distance('C', key);
+      activeMotif = activeMotif.transpose(interval);
+    } catch (e) {
+      // Fallback if interval fails
+    }
+
     // 1. Generate Harmonic Framework
     const progressionData = Progressions.generate(key, length, seed);
     const progression = progressionData.progression;
@@ -75,19 +100,35 @@ class Planner {
     // 2. Apply Voice Leading (SATB)
     const voicings = Leading.connectChords(progression);
 
+    // Apply Motif to Soprano (First few notes)
+    voicings.forEach((voicing, index) => {
+      if (index < activeMotif.notes.length) {
+        // Override Soprano with Motif Note
+        // We might need to adjust octave if it's too low/high, but let's trust transpose for now.
+        if (activeMotif.notes[index]) {
+          voicing.S = activeMotif.notes[index];
+        }
+      }
+    });
+
     // 3. Convert Voicings to Note Objects
     const notes = [];
+    const isSolo = section.type === 'Solo' || section.name.includes('Episode');
 
     voicings.forEach((voicing, index) => {
       const startTime = (index * 2);
 
-      // Bass
+      // Bass (Always present)
       notes.push({ pitch: voicing.B, duration: "2n", startTime: startTime, voice: 3 });
-      // Tenor
-      notes.push({ pitch: voicing.T, duration: "2n", startTime: startTime, voice: 2 });
-      // Alto
-      notes.push({ pitch: voicing.A, duration: "2n", startTime: startTime, voice: 1 });
-      // Soprano
+
+      if (!isSolo) {
+        // Tenor
+        notes.push({ pitch: voicing.T, duration: "2n", startTime: startTime, voice: 2 });
+        // Alto
+        notes.push({ pitch: voicing.A, duration: "2n", startTime: startTime, voice: 1 });
+      }
+
+      // Soprano (Always present)
       notes.push({ pitch: voicing.S, duration: "2n", startTime: startTime, voice: 0 });
     });
 

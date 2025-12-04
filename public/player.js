@@ -1,103 +1,115 @@
-const playBtn = document.getElementById('playBtn');
-const statusDiv = document.getElementById('status');
+document.addEventListener('DOMContentLoaded', () => {
+  console.log("DOM fully loaded and parsed");
+  const playBtn = document.getElementById('playBtn');
+  const statusDiv = document.getElementById('status');
+  const formSelect = document.getElementById('formSelect');
+  const durationSelect = document.getElementById('durationSelect');
 
-let synth;
-let limiter;
+  if (!playBtn) console.error("playBtn not found!");
+  if (!statusDiv) console.error("statusDiv not found!");
 
-async function initAudio() {
-  await Tone.start();
+  let synths = [];
+  let limiter;
 
-  if (!limiter) {
-    // 1. Limiter to prevent clipping with multiple voices
-    limiter = new Tone.Limiter(-1).toDestination();
+  async function initAudio() {
+    console.log("Initializing Audio...");
+    await Tone.start();
+    console.log("Audio Context Started");
+
+    if (!limiter) {
+      limiter = new Tone.Limiter(-1).toDestination();
+    }
+
+    if (synths.length === 0) {
+      // Create 4 synths for SATB, each with different panning
+      // Soprano (0): Right (0.4)
+      // Alto (1): Center-Right (0.15)
+      // Tenor (2): Center-Left (-0.15)
+      // Bass (3): Left (-0.4)
+      const pans = [0.4, 0.15, -0.15, -0.4];
+
+      for (let i = 0; i < 4; i++) {
+        const panner = new Tone.Panner(pans[i]).connect(limiter);
+        const synth = new Tone.PolySynth(Tone.Synth, {
+          oscillator: { type: "sine" },
+          envelope: {
+            attack: 0.02,
+            decay: 0.1,
+            sustain: 0.8,
+            release: 1.2
+          },
+          volume: -10 // Slightly lower volume per voice to prevent clipping
+        }).connect(panner);
+        synths.push(synth);
+      }
+    }
   }
 
-  if (!synth) {
-    // 2. Simple Sine Tones (as requested)
-    // Using PolySynth to handle chords/polyphony
-    synth = new Tone.PolySynth(Tone.Synth, {
-      oscillator: {
-        type: "sine" // Pure sine waves
-      },
-      envelope: {
-        attack: 0.02, // Fast but not clicking
-        decay: 0.1,
-        sustain: 0.8, // Higher sustain for organ-like feel
-        release: 1.2  // Long release for church acoustic feel
-      },
-      volume: -8 // Reduce volume to prevent clipping before limiter
-    }).connect(limiter);
-  }
-}
+  async function generateAndPlay() {
+    console.log("Generate button clicked");
+    statusDiv.innerText = "Generating...";
+    playBtn.disabled = true;
 
-async function generateAndPlay() {
-  statusDiv.innerText = "Generating...";
-  playBtn.disabled = true;
+    try {
+      await initAudio();
 
-  try {
-    await initAudio();
+      const form = formSelect.value;
+      const duration = durationSelect.value;
+      console.log(`Fetching: /api/generate?key=C&style=chorale&form=${form}&duration=${duration}`);
 
-    const formSelect = document.getElementById('formSelect');
-    const form = formSelect.value;
-    const response = await fetch(`/api/generate?key=C&style=chorale&form=${form}`);
-    if (!response.ok) throw new Error("Server error");
+      const response = await fetch(`/api/generate?key=C&style=chorale&form=${form}&duration=${duration}`);
+      if (!response.ok) throw new Error("Server error");
 
-    const data = await response.json();
+      const data = await response.json();
+      console.log("Data received:", data);
 
-    statusDiv.innerHTML = `
-        <strong>Playing:</strong> ${data.meta.style} in ${data.meta.key}<br>
-        <strong>Progression:</strong> ${data.meta.progression}
-    `;
+      statusDiv.innerHTML = `
+                <strong>Playing:</strong> ${data.meta.style} in ${data.meta.key}<br>
+                <strong>Progression:</strong> ${data.meta.progression}
+            `;
 
-    const now = Tone.now() + 0.5; // Start 0.5s from now
-    const beatDuration = 0.6; // Slower tempo (approx 100 BPM) for better interpretation
+      const now = Tone.now() + 0.5;
+      const beatDuration = 0.6;
 
-    data.notes.forEach(note => {
-      // 3. Humanization (Timing & Interpretation)
-      // Add slight random offset to start time (human imperfection)
-      const humanizeStart = (Math.random() * 0.02) - 0.01; // +/- 10ms
+      data.notes.forEach(note => {
+        const humanizeStart = (Math.random() * 0.02) - 0.01;
+        const humanizeDuration = (Math.random() * 0.05);
+        const time = now + (note.startTime * beatDuration) + humanizeStart;
 
-      // Add slight variation to duration (articulation)
-      // Legato feel but distinct
-      const humanizeDuration = (Math.random() * 0.05);
+        let noteBeats = 2;
+        if (note.duration === "4n") noteBeats = 1;
 
-      const time = now + (note.startTime * beatDuration) + humanizeStart;
+        const durationSecs = (noteBeats * beatDuration) - 0.05 + humanizeDuration;
 
-      // Calculate duration based on beatDuration
-      // Note: Tone.js duration strings like "2n" are relative to Tone.Transport.bpm
-      // Here we are manually scheduling, so we should convert "2n" to seconds or use beats.
-      // Our backend returns "2n" (half note) = 2 beats.
-      // "4n" (quarter note) = 1 beat.
+        let velocity = 0.7 + (Math.random() * 0.1);
+        if (note.voice === 3) velocity = 0.8;
+        if (note.voice === 0) velocity = 0.8;
 
-      let noteBeats = 2; // Default 2n
-      if (note.duration === "4n") noteBeats = 1;
+        // Trigger the correct synth based on voice index
+        // Ensure voice index is within bounds (0-3)
+        const voiceIndex = Math.min(Math.max(note.voice, 0), 3);
+        synths[voiceIndex].triggerAttackRelease(note.pitch, durationSecs, time, velocity);
+      });
 
-      const durationSecs = (noteBeats * beatDuration) - 0.05 + humanizeDuration; // Slight gap for articulation
+      const lastNote = data.notes[data.notes.length - 1];
+      const lastNoteBeats = lastNote.duration === "4n" ? 1 : 2;
+      const durationSecs = (lastNote.startTime * beatDuration) + (lastNoteBeats * beatDuration) + 3;
 
-      // 4. Dynamics (Velocity)
-      // Inner voices slightly softer?
-      let velocity = 0.7 + (Math.random() * 0.1);
-      if (note.voice === 3) velocity = 0.8; // Bass slightly louder
-      if (note.voice === 0) velocity = 0.8; // Soprano slightly louder
+      setTimeout(() => {
+        statusDiv.innerText = "Ready";
+        playBtn.disabled = false;
+      }, durationSecs * 1000);
 
-      synth.triggerAttackRelease(note.pitch, durationSecs, time, velocity);
-    });
-
-    // Re-enable button after approximate duration
-    const lastNote = data.notes[data.notes.length - 1];
-    const lastNoteBeats = lastNote.duration === "4n" ? 1 : 2;
-    const duration = (lastNote.startTime * beatDuration) + (lastNoteBeats * beatDuration) + 3;
-
-    setTimeout(() => {
-      statusDiv.innerText = "Ready";
+    } catch (e) {
+      console.error(e);
+      statusDiv.innerText = "Error: " + e.message;
       playBtn.disabled = false;
-    }, duration * 1000);
-
-  } catch (e) {
-    console.error(e);
-    statusDiv.innerText = "Error: " + e.message;
-    playBtn.disabled = false;
+    }
   }
-}
 
-playBtn.addEventListener('click', generateAndPlay);
+  playBtn.addEventListener('click', (e) => {
+    e.preventDefault();
+    generateAndPlay();
+  });
+  console.log("Event listener added to playBtn");
+});

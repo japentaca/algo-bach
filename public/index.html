@@ -54,6 +54,14 @@
         .controls {
             margin-bottom: 2rem;
         }
+
+        select {
+            padding: 12px;
+            font-size: 1.1rem;
+            border-radius: 6px;
+            border: 1px solid #ccc;
+            margin-right: 10px;
+        }
     </style>
 </head>
 
@@ -61,11 +69,18 @@
     <div class="container">
         <h1>Bach-Style Generator</h1>
         <div class="controls">
-            <select id="formSelect"
-                style="padding: 12px; font-size: 1.1rem; border-radius: 6px; border: 1px solid #ccc; margin-right: 10px;">
+            <select id="formSelect">
                 <option value="Chorale">Chorale</option>
                 <option value="Prelude">Prelude</option>
                 <option value="Fugue">Fugue</option>
+                <option value="Ritornello">Ritornello</option>
+                <option value="Variations">Variations</option>
+                <option value="Suite">Suite</option>
+            </select>
+            <select id="durationSelect">
+                <option value="1">Short (~1m)</option>
+                <option value="3">Medium (~3m)</option>
+                <option value="5">Long (~5m)</option>
             </select>
             <button id="playBtn">Generate & Play</button>
         </div>
