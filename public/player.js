@@ -9,6 +9,11 @@ document.addEventListener('DOMContentLoaded', () => {
   const randomTextureCheck = document.getElementById('randomTextureCheck');
   const sparseOrnamentsCheck = document.getElementById('sparseOrnamentsCheck');
 
+  // MIDI elements
+  const midiEnabledCheck = document.getElementById('midiEnabledCheck');
+  const midiOutputSelect = document.getElementById('midiOutputSelect');
+  const autoPanBtn = document.getElementById('autoPanBtn');
+
   if (!playBtn) console.error("playBtn not found!");
   if (!statusDiv) console.error("statusDiv not found!");
 
@@ -22,6 +27,7 @@ document.addEventListener('DOMContentLoaded', () => {
   let currentSeed = null;
   let currentStyle = 'Strings';  // Default style
   let currentImpulse = 'RoomConcertHall.mp3';  // Current impulse response file (default: Concert Hall)
+  let midiInitialized = false;  // Track if MIDI has been initialized
 
   /**
    * Properly dispose all audio resources (samplers, volumes, panners)
@@ -76,6 +82,108 @@ document.addEventListener('DOMContentLoaded', () => {
     styleSelect.addEventListener('change', (e) => {
       currentStyle = e.target.value;
       console.log(`Style changed to: ${currentStyle}`);
+    });
+  }
+
+  // Initialize MIDI on page load
+  async function initializeMidi() {
+    if (!midiInitialized) {
+      midiInitialized = true;
+      const success = await initMidi();
+      if (success) {
+        updateDeviceList();
+        console.log("MIDI initialized successfully");
+      } else {
+        console.log("MIDI initialization failed or not supported");
+        if (midiEnabledCheck) midiEnabledCheck.disabled = true;
+      }
+    }
+  }
+
+  // Initialize MIDI when page loads
+  initializeMidi();
+
+  // Handle MIDI enable/disable
+  if (midiEnabledCheck) {
+    midiEnabledCheck.addEventListener('change', (e) => {
+      const enabled = e.target.checked;
+      if (enabled && midiOutputSelect.value) {
+        selectOutputDevice(midiOutputSelect.value);
+      }
+      setMidiEnabled(enabled);
+      console.log(`MIDI output ${enabled ? 'enabled' : 'disabled'}`);
+    });
+  }
+
+  // Handle MIDI output device selection
+  if (midiOutputSelect) {
+    midiOutputSelect.addEventListener('change', (e) => {
+      const deviceId = e.target.value;
+      if (deviceId) {
+        const success = selectOutputDevice(deviceId);
+        if (success && midiEnabledCheck.checked) {
+          setMidiEnabled(true);
+        }
+      } else {
+        setMidiEnabled(false);
+      }
+    });
+  }
+
+  // Handle MIDI channel changes
+  document.querySelectorAll('.midi-channel-select').forEach(select => {
+    select.addEventListener('change', (e) => {
+      const voiceIndex = parseInt(e.target.dataset.voice);
+      const channel = parseInt(e.target.value);
+      setVoiceChannel(voiceIndex, channel);
+      console.log(`Voice ${voiceIndex} channel set to ${channel}`);
+    });
+  });
+
+  // Handle MIDI volume changes
+  document.querySelectorAll('.midi-volume-slider').forEach(slider => {
+    slider.addEventListener('input', (e) => {
+      const voiceIndex = parseInt(e.target.dataset.voice);
+      const volume = parseInt(e.target.value);
+      setVoiceVolume(voiceIndex, volume);
+
+      // Update display value
+      const valueDisplay = e.target.parentElement.querySelector('.midi-volume-value');
+      if (valueDisplay) valueDisplay.textContent = volume;
+    });
+  });
+
+  // Handle MIDI pan changes
+  document.querySelectorAll('.midi-pan-slider').forEach(slider => {
+    slider.addEventListener('input', (e) => {
+      const voiceIndex = parseInt(e.target.dataset.voice);
+      const pan = parseInt(e.target.value);
+      setVoicePan(voiceIndex, pan);
+
+      // Update display value
+      const valueDisplay = e.target.parentElement.querySelector('.midi-pan-value');
+      if (valueDisplay) valueDisplay.textContent = pan;
+    });
+  });
+
+  // Handle auto-pan button
+  if (autoPanBtn) {
+    autoPanBtn.addEventListener('click', () => {
+      autoPanVoices(4);
+
+      // Update UI sliders to reflect new pan values
+      for (let i = 0; i < 4; i++) {
+        const config = getVoiceConfig(i);
+        const slider = document.querySelector(`.midi-pan-slider[data-voice="${i}"]`);
+        const valueDisplay = document.querySelector(`.voice-control[data-voice="${i}"] .midi-pan-value`);
+
+        if (slider && valueDisplay && config) {
+          slider.value = config.pan;
+          valueDisplay.textContent = config.pan;
+        }
+      }
+
+      console.log("Auto-pan applied to all voices");
     });
   }
 
@@ -248,14 +356,25 @@ document.addEventListener('DOMContentLoaded', () => {
     playBtn.disabled = true;
 
     try {
-      // Initialize audio context
-      await initAudio();
+      // Check if MIDI is enabled
+      const useMidi = isMidiEnabled();
 
-      // Load samplers for selected style
-      const samplerSetupSuccess = await setupSamplers(currentStyle);
-      if (!samplerSetupSuccess) {
-        playBtn.disabled = false;
-        return;
+      if (!useMidi) {
+        // Initialize audio context only if not using MIDI
+        await initAudio();
+
+        // Load samplers for selected style
+        const samplerSetupSuccess = await setupSamplers(currentStyle);
+        if (!samplerSetupSuccess) {
+          playBtn.disabled = false;
+          return;
+        }
+      } else {
+        // Dispose any existing samplers if switching to MIDI mode
+        if (samplers.length > 0 || volumes.length > 0 || panners.length > 0) {
+          console.log("Disposing audio resources for MIDI mode...");
+          disposeAllAudioResources();
+        }
       }
 
       const form = formSelect.value;
@@ -294,9 +413,11 @@ document.addEventListener('DOMContentLoaded', () => {
       console.log("Data received:", data);
       console.log("Total notes:", data.notes.length);
 
+      const outputMode = isMidiEnabled() ? 'MIDI' : 'Tone.js';
       statusDiv.innerHTML = `
                 <strong>Playing:</strong> ${data.meta.style} in ${data.meta.key} ${data.meta.mode}<br>
                 <strong>Style:</strong> ${STYLE_PRESETS[currentStyle].displayName}<br>
+                <strong>Output:</strong> ${outputMode}<br>
                 <strong>Progression:</strong> ${data.meta.progression}<br>
                 <strong>Expressivity:</strong> ${expressivityPreset} | Random texture: ${randomTexture ? 'on' : 'off'} | Sparse cadences: ${sparseOrnaments ? 'on' : 'off'}
             `;
@@ -341,11 +462,23 @@ document.addEventListener('DOMContentLoaded', () => {
         // Trigger the correct sampler based on voice index
         const voiceIndex = Math.min(Math.max(note.voice, 0), 3);
 
-        // Set volume for this note
-        volumes[voiceIndex].volume.value = volumeDb;
+        // Check if MIDI output is enabled
+        if (isMidiEnabled()) {
+          // Send MIDI note on
+          noteOn(note.pitch, Math.round(velocity * 127), voiceIndex);
 
-        // Trigger the note
-        samplers[voiceIndex].triggerAttackRelease(note.pitch, durationSecs, time, velocity);
+          // Schedule note off
+          setTimeout(() => {
+            noteOff(note.pitch, voiceIndex);
+          }, durationSecs * 1000);
+        } else {
+          // Use Tone.js sampler
+          // Set volume for this note
+          volumes[voiceIndex].volume.value = volumeDb;
+
+          // Trigger the note
+          samplers[voiceIndex].triggerAttackRelease(note.pitch, durationSecs, time, velocity);
+        }
       });
 
       const lastNote = data.notes[data.notes.length - 1];

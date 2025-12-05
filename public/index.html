@@ -147,6 +147,119 @@
             min-width: 40px;
             text-align: right;
         }
+
+        .midi-controls {
+            margin-top: 2rem;
+            padding: 1.5rem;
+            background: #f0f9ff;
+            border-radius: 8px;
+            border-left: 4px solid #0ea5e9;
+        }
+
+        .midi-controls h3 {
+            margin: 0 0 1rem 0;
+            font-size: 1rem;
+            color: #2c3e50;
+            font-weight: 600;
+        }
+
+        .midi-device-container {
+            margin: 1rem 0;
+        }
+
+        .midi-device-container label {
+            display: block;
+            text-align: left;
+            margin-bottom: 0.5rem;
+        }
+
+        .midi-device-container select {
+            width: 100%;
+            margin-top: 0.5rem;
+            box-sizing: border-box;
+        }
+
+        .midi-voice-controls {
+            margin-top: 1.5rem;
+        }
+
+        .midi-voice-controls h4 {
+            margin: 0 0 1rem 0;
+            font-size: 0.95rem;
+            color: #2c3e50;
+            font-weight: 600;
+        }
+
+        .voice-control {
+            margin-bottom: 1rem;
+            padding: 1rem;
+            background: #ffffff;
+            border-radius: 6px;
+            border: 1px solid #e2e8f0;
+        }
+
+        .voice-control h5 {
+            margin: 0 0 0.8rem 0;
+            font-size: 0.9rem;
+            color: #2c3e50;
+            font-weight: 600;
+        }
+
+        .control-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 1rem;
+            align-items: center;
+        }
+
+        .control-row label {
+            display: flex;
+            flex-direction: column;
+            min-width: 150px;
+            font-size: 0.85rem;
+        }
+
+        .midi-channel-select {
+            margin-top: 0.3rem;
+            padding: 6px;
+            font-size: 0.85rem;
+            border-radius: 4px;
+            border: 1px solid #ccc;
+        }
+
+        .midi-volume-slider,
+        .midi-pan-slider {
+            margin-top: 0.3rem;
+            cursor: pointer;
+        }
+
+        .midi-volume-value,
+        .midi-pan-value {
+            font-weight: 600;
+            color: #0ea5e9;
+            min-width: 30px;
+            text-align: right;
+        }
+
+        .midi-auto-pan {
+            margin-top: 1rem;
+            text-align: center;
+        }
+
+        #autoPanBtn {
+            padding: 8px 16px;
+            font-size: 0.9rem;
+            background: #0ea5e9;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        #autoPanBtn:hover {
+            background: #0284c7;
+        }
     </style>
 </head>
 
@@ -275,6 +388,135 @@
                 <input type="range" id="reverbMix" min="0" max="100" value="25" step="5">
             </div>
         </div>
+        <div class="midi-controls">
+            <h3>🎹 MIDI Output</h3>
+            <label>
+                <input type="checkbox" id="midiEnabledCheck">
+                Enable MIDI Output
+            </label>
+            <div class="midi-device-container">
+                <label>
+                    MIDI Output Device:
+                    <select id="midiOutputSelect">
+                        <option value="">No MIDI devices available</option>
+                    </select>
+                </label>
+            </div>
+            <div class="midi-voice-controls">
+                <h4>Voice Settings</h4>
+                <div class="voice-control" data-voice="0">
+                    <h5>Soprano</h5>
+                    <div class="control-row">
+                        <label>Channel: <select class="midi-channel-select" data-voice="0">
+                                <option value="1" selected>1</option>
+                                <option value="2">2</option>
+                                <option value="3">3</option>
+                                <option value="4">4</option>
+                                <option value="5">5</option>
+                                <option value="6">6</option>
+                                <option value="7">7</option>
+                                <option value="8">8</option>
+                                <option value="9">9</option>
+                                <option value="10">10</option>
+                                <option value="11">11</option>
+                                <option value="12">12</option>
+                                <option value="13">13</option>
+                                <option value="14">14</option>
+                                <option value="15">15</option>
+                                <option value="16">16</option>
+                            </select></label>
+                        <label>Volume: <input type="range" class="midi-volume-slider" data-voice="0" min="0" max="127"
+                                value="100"> <span class="midi-volume-value">100</span></label>
+                        <label>Pan: <input type="range" class="midi-pan-slider" data-voice="0" min="0" max="127"
+                                value="127"> <span class="midi-pan-value">127</span></label>
+                    </div>
+                </div>
+                <div class="voice-control" data-voice="1">
+                    <h5>Alto</h5>
+                    <div class="control-row">
+                        <label>Channel: <select class="midi-channel-select" data-voice="1">
+                                <option value="1">1</option>
+                                <option value="2" selected>2</option>
+                                <option value="3">3</option>
+                                <option value="4">4</option>
+                                <option value="5">5</option>
+                                <option value="6">6</option>
+                                <option value="7">7</option>
+                                <option value="8">8</option>
+                                <option value="9">9</option>
+                                <option value="10">10</option>
+                                <option value="11">11</option>
+                                <option value="12">12</option>
+                                <option value="13">13</option>
+                                <option value="14">14</option>
+                                <option value="15">15</option>
+                                <option value="16">16</option>
+                            </select></label>
+                        <label>Volume: <input type="range" class="midi-volume-slider" data-voice="1" min="0" max="127"
+                                value="100"> <span class="midi-volume-value">100</span></label>
+                        <label>Pan: <input type="range" class="midi-pan-slider" data-voice="1" min="0" max="127"
+                                value="85"> <span class="midi-pan-value">85</span></label>
+                    </div>
+                </div>
+                <div class="voice-control" data-voice="2">
+                    <h5>Tenor</h5>
+                    <div class="control-row">
+                        <label>Channel: <select class="midi-channel-select" data-voice="2">
+                                <option value="1">1</option>
+                                <option value="2">2</option>
+                                <option value="3" selected>3</option>
+                                <option value="4">4</option>
+                                <option value="5">5</option>
+                                <option value="6">6</option>
+                                <option value="7">7</option>
+                                <option value="8">8</option>
+                                <option value="9">9</option>
+                                <option value="10">10</option>
+                                <option value="11">11</option>
+                                <option value="12">12</option>
+                                <option value="13">13</option>
+                                <option value="14">14</option>
+                                <option value="15">15</option>
+                                <option value="16">16</option>
+                            </select></label>
+                        <label>Volume: <input type="range" class="midi-volume-slider" data-voice="2" min="0" max="127"
+                                value="100"> <span class="midi-volume-value">100</span></label>
+                        <label>Pan: <input type="range" class="midi-pan-slider" data-voice="2" min="0" max="127"
+                                value="42"> <span class="midi-pan-value">42</span></label>
+                    </div>
+                </div>
+                <div class="voice-control" data-voice="3">
+                    <h5>Bass</h5>
+                    <div class="control-row">
+                        <label>Channel: <select class="midi-channel-select" data-voice="3">
+                                <option value="1">1</option>
+                                <option value="2">2</option>
+                                <option value="3">3</option>
+                                <option value="4" selected>4</option>
+                                <option value="5">5</option>
+                                <option value="6">6</option>
+                                <option value="7">7</option>
+                                <option value="8">8</option>
+                                <option value="9">9</option>
+                                <option value="10">10</option>
+                                <option value="11">11</option>
+                                <option value="12">12</option>
+                                <option value="13">13</option>
+                                <option value="14">14</option>
+                                <option value="15">15</option>
+                                <option value="16">16</option>
+                            </select></label>
+                        <label>Volume: <input type="range" class="midi-volume-slider" data-voice="3" min="0" max="127"
+                                value="100"> <span class="midi-volume-value">100</span></label>
+                        <label>Pan: <input type="range" class="midi-pan-slider" data-voice="3" min="0" max="127"
+                                value="0"> <span class="midi-pan-value">0</span></label>
+                    </div>
+                </div>
+                <div class="midi-auto-pan">
+                    <button id="autoPanBtn">Auto-Pan Voices</button>
+                </div>
+            </div>
+        </div>
         <div class="seed-controls">
             <label>
                 <input type="checkbox" id="randomizeCheck" checked>
@@ -291,6 +533,7 @@
     </div>
     <script src="instrumentConfig.js"></script>
     <script src="sampleLoader.js"></script>
+    <script src="midi.js"></script>
     <script src="player.js"></script>
 </body>
 
