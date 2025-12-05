@@ -1,0 +1,14 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<svg width="256" height="256" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <style>
+      .bg { fill: #1a1a2e; }
+      .note { fill: #00d4ff; }
+    </style>
+  </defs>
+  <rect class="bg" width="256" height="256"/>
+  <!-- Musical note -->
+  <circle class="note" cx="140" cy="160" r="20"/>
+  <rect class="note" x="135" y="30" width="10" height="135" rx="2"/>
+  <ellipse class="note" cx="115" cy="50" rx="25" ry="15" transform="rotate(-30 115 50)"/>
+</svg>

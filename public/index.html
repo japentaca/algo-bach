@@ -5,6 +5,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Bach Generator</title>
+    <link rel="icon" type="image/x-icon" href="/favicon.ico">
+    <link rel="shortcut icon" type="image/x-icon" href="/favicon.ico">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
     <style>
         body {
@@ -193,6 +195,30 @@
                 <option value="5">Long (~5m)</option>
             </select>
             <button id="playBtn">Generate & Play</button>
+        </div>
+        <div class="reverb-controls">
+            <h3>🎶 Ornaments</h3>
+            <div class="reverb-mix-container">
+                <label>
+                    Ornament Density:
+                    <span class="reverb-mix-value"><span id="ornamentDensityValue">50</span>%</span>
+                </label>
+                <input type="range" id="ornamentDensity" min="0" max="100" value="50" step="5">
+                <small style="display:block; margin-top: 0.5rem; color: #666;">Higher = more passing tones, neighbor
+                    tones, suspensions</small>
+            </div>
+        </div>
+        <div class="reverb-controls">
+            <h3>⏱️ Tempo</h3>
+            <div class="reverb-mix-container">
+                <label>
+                    Beats Per Minute (BPM):
+                    <span class="reverb-mix-value"><span id="tempoValue">120</span> BPM</span>
+                </label>
+                <input type="range" id="tempoSlider" min="40" max="200" value="120" step="5">
+                <small style="display:block; margin-top: 0.5rem; color: #666;">Adjust playback speed (40-200
+                    BPM)</small>
+            </div>
         </div>
         <div class="reverb-controls">
             <h3>🎵 Reverb Effect</h3>

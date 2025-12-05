@@ -92,13 +92,17 @@ const Progressions = {
     }
 
     // For major mode
-    if (position === 1) return CADENCE_TYPES.HC;  // Half cadence in middle
-    if (position === 2) {
-      // End: prefer PAC or IAC with small chance of deceptive
+    if (position === 1) {
+      // Middle position: half cadence or deceptive allowed
       const rand = Math.random();
-      if (rand < 0.6) return CADENCE_TYPES.PAC;
-      if (rand < 0.85) return CADENCE_TYPES.IAC;
-      return CADENCE_TYPES.DC;
+      if (rand < 0.7) return CADENCE_TYPES.HC;
+      return CADENCE_TYPES.DC;  // Deceptive cadence only in middle, never at end
+    }
+    if (position === 2) {
+      // FINAL position: MUST resolve to tonic (never deceptive)
+      const rand = Math.random();
+      if (rand < 0.7) return CADENCE_TYPES.PAC;  // Perfect Authentic preferred
+      return CADENCE_TYPES.IAC;  // Imperfect Authentic also resolves to I
     }
     return CADENCE_TYPES.PAC;  // Default to perfect authentic
   },
@@ -198,6 +202,49 @@ const Progressions = {
       cadenceUsed: cadenceType || 'Auto-selected',
       rng: rng
     };
+  },
+
+  /**
+   * Generate a final cadence that ALWAYS resolves to tonic
+   * Use this for the very end of a piece to ensure proper resolution
+   * @param {string} mode - 'major' or 'minor'
+   * @returns {array} Final cadence progression (guaranteed to end on I/i)
+   */
+  getFinalCadence: (mode = 'major') => {
+    if (mode === 'minor') {
+      // Minor: iv - V - i (or ii°6 - V - i for more color)
+      const rand = Math.random();
+      if (rand < 0.6) {
+        return [
+          { numeral: 'iv', inversion: 0 },
+          { numeral: 'V', inversion: 0 },
+          { numeral: 'i', inversion: 0 }
+        ];
+      } else {
+        // Cadential 6/4 version
+        return [
+          { numeral: 'i', inversion: 2 },
+          { numeral: 'V', inversion: 0 },
+          { numeral: 'i', inversion: 0 }
+        ];
+      }
+    }
+    // Major: IV - V - I or I6/4 - V - I
+    const rand = Math.random();
+    if (rand < 0.5) {
+      return [
+        { numeral: 'IV', inversion: 0 },
+        { numeral: 'V', inversion: 0 },
+        { numeral: 'I', inversion: 0 }
+      ];
+    } else {
+      // Cadential 6/4 version
+      return [
+        { numeral: 'I', inversion: 2 },
+        { numeral: 'V', inversion: 0 },
+        { numeral: 'I', inversion: 0 }
+      ];
+    }
   },
 
   /**

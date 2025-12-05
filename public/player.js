@@ -11,6 +11,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   let samplers = [];
   let volumes = [];  // Volume nodes for dynamics control
+  let panners = [];  // Panner nodes for stereo placement
   let limiter;
   let convolver;  // Convolver node for reverb
   let reverbGain;  // Gain node to control reverb mix
@@ -18,6 +19,41 @@ document.addEventListener('DOMContentLoaded', () => {
   let currentSeed = null;
   let currentStyle = 'Strings';  // Default style
   let currentImpulse = 'RoomConcertHall.mp3';  // Current impulse response file (default: Concert Hall)
+
+  /**
+   * Properly dispose all audio resources (samplers, volumes, panners)
+   */
+  function disposeAllAudioResources() {
+    // Dispose samplers
+    if (samplers.length > 0) {
+      disposeSamplers(samplers);
+    }
+
+    // Dispose volume nodes
+    if (volumes.length > 0) {
+      volumes.forEach(volume => {
+        if (volume && typeof volume.dispose === 'function') {
+          volume.dispose();
+        }
+      });
+    }
+
+    // Dispose panner nodes
+    if (panners.length > 0) {
+      panners.forEach(panner => {
+        if (panner && typeof panner.dispose === 'function') {
+          panner.dispose();
+        }
+      });
+    }
+
+    // Clear arrays
+    samplers = [];
+    volumes = [];
+    panners = [];
+
+    console.log("✓ All audio resources disposed");
+  }
 
   // Seed generation function
   function generateUniqueSeed() {
@@ -67,6 +103,35 @@ document.addEventListener('DOMContentLoaded', () => {
             console.error(`Error loading impulse: ${error.message}`);
           }
         }
+      }
+    });
+  }
+
+  // Handle ornament density slider
+  const ornamentDensitySlider = document.getElementById('ornamentDensity');
+  const ornamentDensityValue = document.getElementById('ornamentDensityValue');
+  if (ornamentDensitySlider) {
+    ornamentDensitySlider.addEventListener('input', (e) => {
+      const densityPercent = parseInt(e.target.value);
+      if (ornamentDensityValue) {
+        ornamentDensityValue.innerText = densityPercent;
+      }
+    });
+  }
+
+  // Handle tempo slider
+  const tempoSlider = document.getElementById('tempoSlider');
+  const tempoValue = document.getElementById('tempoValue');
+  if (tempoSlider) {
+    tempoSlider.addEventListener('input', (e) => {
+      const bpm = parseInt(e.target.value);
+      if (tempoValue) {
+        tempoValue.innerText = bpm;
+      }
+      // Update Tone.js BPM in real-time if audio is initialized
+      if (Tone.Transport.bpm.value !== bpm) {
+        Tone.Transport.bpm.value = bpm;
+        console.log(`Tempo set to ${bpm} BPM`);
       }
     });
   }
@@ -128,12 +193,10 @@ document.addEventListener('DOMContentLoaded', () => {
    * Create samplers for the selected style with volume control nodes
    */
   async function setupSamplers(styleName) {
-    // Dispose old samplers if they exist
-    if (samplers.length > 0) {
-      console.log("Disposing old samplers...");
-      disposeSamplers(samplers);
-      samplers = [];
-      volumes = [];
+    // Dispose old samplers and audio nodes if they exist
+    if (samplers.length > 0 || volumes.length > 0 || panners.length > 0) {
+      console.log("Disposing old audio resources...");
+      disposeAllAudioResources();
     }
 
     // Panning setup for stereo placement
@@ -164,6 +227,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         samplers.push(loadedSamplers[i]);
         volumes.push(volume);
+        panners.push(panner);
       }
 
       console.log(`✓ Samplers setup complete for ${styleName}`);
@@ -211,9 +275,13 @@ document.addEventListener('DOMContentLoaded', () => {
       // Map duration category to number of bars
       let barsToGenerate = parseInt(durationCategory) * 30;
 
-      console.log(`Fetching: /api/generate?key=${selectedKey}&mode=${selectedMode}&form=${form}&duration=${barsToGenerate}&seed=${encodeURIComponent(currentSeed)}`);
+      // Get ornament density from slider
+      const ornamentDensitySlider = document.getElementById('ornamentDensity');
+      const ornamentDensity = ornamentDensitySlider ? parseInt(ornamentDensitySlider.value) : 50;
 
-      const response = await fetch(`/api/generate?key=${encodeURIComponent(selectedKey)}&mode=${selectedMode}&form=${form}&duration=${barsToGenerate}&seed=${encodeURIComponent(currentSeed)}`);
+      console.log(`Fetching: /api/generate?key=${selectedKey}&mode=${selectedMode}&form=${form}&duration=${barsToGenerate}&seed=${encodeURIComponent(currentSeed)}&ornamentDensity=${ornamentDensity}`);
+
+      const response = await fetch(`/api/generate?key=${encodeURIComponent(selectedKey)}&mode=${selectedMode}&form=${form}&duration=${barsToGenerate}&seed=${encodeURIComponent(currentSeed)}&ornamentDensity=${ornamentDensity}`);
       if (!response.ok) throw new Error("Server error");
 
       const data = await response.json();
@@ -227,20 +295,33 @@ document.addEventListener('DOMContentLoaded', () => {
             `;
 
       const now = Tone.now() + 0.5;
+      // Get tempo from slider (default 120 BPM)
+      const tempoSlider = document.getElementById('tempoSlider');
+      const bpm = tempoSlider ? parseInt(tempoSlider.value) : 120;
+      Tone.Transport.bpm.value = bpm;
+
       // At 120 BPM, quarter note = 0.5 seconds
-      // Each "beat unit" in our system = quarter note
-      const beatDuration = 0.5;
+      // Beat duration scales with BPM: beatDuration = (60 / BPM) / 4 for quarter note
+      // For 120 BPM: (60 / 120) / 4 = 0.5 / 4 = 0.125 for sixteenth, but we use quarter notes
+      // Actually: At 120 BPM, quarter note = 0.5 seconds. This is fixed in Tone.Transport
+      // But we need to scale the timing: timeInBeats = timeInBeats * (120 / actualBPM)
+      const bpmScaleFactor = 120 / bpm;  // Scale factor relative to 120 BPM baseline
+      const beatDuration = 0.5;  // Baseline: 0.5 seconds per quarter note at 120 BPM
 
       data.notes.forEach(note => {
         const humanizeStart = (Math.random() * 0.02) - 0.01;
         const humanizeDuration = (Math.random() * 0.05);
-        const time = now + (note.startTime * beatDuration) + humanizeStart;
+        const time = now + (note.startTime * beatDuration * bpmScaleFactor) + humanizeStart;
 
         let noteBeats = 2;
         if (note.duration === "4n") noteBeats = 1;
         if (note.duration === "8n") noteBeats = 0.5;
+        if (note.duration === "16n") noteBeats = 0.25;
+        if (note.duration === "32n") noteBeats = 0.125;
+        if (note.duration === "4n.") noteBeats = 1.5;  // Dotted quarter
+        if (note.duration === "8n.") noteBeats = 0.75;  // Dotted eighth
 
-        const durationSecs = (noteBeats * beatDuration) - 0.05 + humanizeDuration;
+        const durationSecs = (noteBeats * beatDuration) - 0.02 + humanizeDuration;
 
         // Velocity for dynamics
         let velocity = 0.7 + (Math.random() * 0.1);
@@ -261,7 +342,11 @@ document.addEventListener('DOMContentLoaded', () => {
       });
 
       const lastNote = data.notes[data.notes.length - 1];
-      const lastNoteBeats = lastNote.duration === "4n" ? 1 : lastNote.duration === "8n" ? 0.5 : 2;
+      const lastNoteBeats = lastNote.duration === "32n" ? 0.125 :
+                            lastNote.duration === "16n" ? 0.25 :
+                            lastNote.duration === "8n" ? 0.5 :
+                            lastNote.duration === "4n" ? 1 :
+                            lastNote.duration === "4n." ? 1.5 : 2;
       const durationSecs = (lastNote.startTime * beatDuration) + (lastNoteBeats * beatDuration) + 3;
 
       setTimeout(() => {

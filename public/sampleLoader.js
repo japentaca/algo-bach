@@ -83,13 +83,26 @@ function velocityToDb(velocity) {
 
 /**
  * Dispose of samplers to free memory
+ * Handles cleanup of audio buffers and resources
  * @param {Array<Tone.Sampler>} samplers - Array of samplers to dispose
  */
 function disposeSamplers(samplers) {
   if (Array.isArray(samplers)) {
-    samplers.forEach(sampler => {
-      if (sampler && typeof sampler.dispose === 'function') {
-        sampler.dispose();
+    samplers.forEach((sampler, index) => {
+      if (sampler) {
+        try {
+          // Disconnect before disposing
+          if (typeof sampler.disconnect === 'function') {
+            sampler.disconnect();
+          }
+          // Dispose the sampler
+          if (typeof sampler.dispose === 'function') {
+            sampler.dispose();
+          }
+          console.log(`✓ Sampler ${index} disposed and disconnected`);
+        } catch (error) {
+          console.warn(`Warning disposing sampler ${index}: ${error.message}`);
+        }
       }
     });
   }

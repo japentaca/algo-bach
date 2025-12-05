@@ -8,14 +8,25 @@ const seedrandom = require('seedrandom');
 class Planner {
   generate(options = {}) {
     const form = options.form || 'Chorale';
-    const formDuration = options.duration || 2;
+    const formDuration = parseInt(options.duration) || 2;
     const mode = options.mode || 'major';
     const key = options.key || 'C';
     const seed = options.seed || 'default';
+    // Handle 0 correctly - don't use || 50 which makes 0 become 50
+    const ornamentDensity = options.ornamentDensity !== undefined ? parseInt(options.ornamentDensity) : 50;
+
+    // Create ornament configuration with voice-specific multipliers
+    // Soprano gets most ornaments, bass gets least
+    const ornamentConfig = {
+      baseDensity: ornamentDensity / 100,  // Convert 0-100 to 0-1
+      voiceMultipliers: [1.0, 0.7, 0.5, 0.3],  // Soprano, Alto, Tenor, Bass
+      totalMeasures: formDuration,
+      cadenceMeasures: 2  // Suppress ornaments in final 2 measures
+    };
 
     // Check if this is a fugue form
     if (form.toLowerCase() === 'fugue') {
-      return this.generateFugue(key, mode, formDuration, seed);
+      return this.generateFugue(key, mode, formDuration, seed, ornamentConfig);
     }
 
     // 1. Generate Harmonic Framework (main progression)
@@ -40,9 +51,20 @@ class Planner {
       notes.push({ pitch: voicing.S, duration: noteDuration, startTime: startTime, voice: 0 });
     });
 
-    // 4. Apply Melodic Ornamentation
-    const suspendedNotes = Melodic.addSuspensions(notes, progression, key);
-    const ornamentedNotes = Melodic.addPassingTones(suspendedNotes, key, mode);
+    // 4. Apply Melodic Ornamentation with configuration
+    // Chain all ornament functions including trills, mordents, and turns for rapid figures
+    const suspendedNotes = Melodic.addSuspensions(notes, progression, key, ornamentConfig);
+    const withPassingTones = Melodic.addPassingTones(suspendedNotes, key, mode, ornamentConfig);
+    const withNeighbors = Melodic.addNeighborTones(withPassingTones, key, ornamentConfig);
+    const withAppog = Melodic.addAppoggiature(withNeighbors, progression, key, ornamentConfig);
+    const with98 = Melodic.add98Suspension(withAppog, ornamentConfig);
+    // Add rapid figures: trills, mordents, turns (use fractional beat times)
+    const withTrills = Melodic.addTrills(with98, key, mode, ornamentConfig);
+    const withMordents = Melodic.addMordents(withTrills, key, mode, ornamentConfig);
+    const withTurns = Melodic.addTurns(withMordents, key, mode, ornamentConfig);
+    
+    // Final cleanup: remove any ornaments that create harsh dissonances between voices
+    const ornamentedNotes = Melodic.cleanDissonances(withTurns);
 
     const numeralString = progression.map(p => {
       let n = p.numeral;
@@ -57,7 +79,7 @@ class Planner {
     };
   }
 
-  generateFugue(key, mode = 'major', duration = 2, seed = 'default') {
+  generateFugue(key, mode = 'major', duration = 2, seed = 'default', ornamentConfig = null) {
     const rng = seedrandom(seed);
     const allNotes = [];
     let currentTime = 0;
@@ -96,8 +118,31 @@ class Planner {
     const finalNotes = this.realizeFinalEntry(key, mode, subject, rng);
     finalNotes.forEach(n => allNotes.push({ ...n, startTime: n.startTime + currentTime }));
 
+    // First, fix base note dissonances in fugue counterpoint
+    let ornamentedNotes = Melodic.fixFugueDissonances(allNotes, key, mode);
+    ornamentedNotes = ornamentedNotes.sort((a, b) => a.startTime - b.startTime);
+
+    if (ornamentConfig) {
+      // Update config with actual total measures based on final time
+      const totalBeats = currentTime + 16; // Approximate total beats
+      const updatedConfig = {
+        ...ornamentConfig,
+        totalMeasures: Math.ceil(totalBeats / 4)
+      };
+
+      // Apply ornamentation chain including trills and mordents for baroque fugue style
+      const withPassingTones = Melodic.addPassingTones(ornamentedNotes, key, mode, updatedConfig);
+      const withNeighbors = Melodic.addNeighborTones(withPassingTones, key, updatedConfig);
+      const with98 = Melodic.add98Suspension(withNeighbors, updatedConfig);
+      const withTrills = Melodic.addTrills(with98, key, mode, updatedConfig);
+      const withMordents = Melodic.addMordents(withTrills, key, mode, updatedConfig);
+      
+      // Final cleanup: remove dissonant ornaments
+      ornamentedNotes = Melodic.cleanDissonances(withMordents);
+    }
+
     return {
-      notes: allNotes.sort((a, b) => a.startTime - b.startTime),
+      notes: ornamentedNotes,
       meta: {
         key, mode, form: 'Fugue', style: 'Baroque Fugue',
         progression: 'Fugue: Exposition - Episode - Middle Entries - Episode - Stretto - Final Entry'
@@ -143,7 +188,41 @@ class Planner {
     const scaleType = mode === 'minor' ? 'natural minor' : 'major';
     const scaleData = Scale.get(`${key} ${scaleType}`);
     const scale = scaleData.notes && scaleData.notes.length > 0 ? scaleData.notes : ['C', 'D', 'E', 'F', 'G', 'A', 'B'];
-    return subject.map(() => scale[Math.floor(rng() * 7)] + '3');
+    
+    // Define consonant intervals from the subject note
+    // 3rds, 4ths, 5ths, 6ths, octaves are consonant
+    const consonantSemitones = [3, 4, 5, 7, 8, 9, 12, 0]; // 3m, 3M, 4P, 5P, 6m, 6M, 8P, unison
+    
+    return subject.map((subjectPitch) => {
+      const subjectPC = Note.pitchClass(subjectPitch);
+      
+      // Try to find a consonant scale degree
+      // Shuffle scale notes and pick first consonant one
+      const shuffledScale = [...scale].sort(() => rng() - 0.5);
+      
+      for (const candidatePC of shuffledScale) {
+        const candidatePitch = candidatePC + '3';
+        const subjectWithOctave = subjectPC + '4'; // Subject is typically in octave 4
+        const semitones = Math.abs(Interval.semitones(Interval.distance(candidatePitch, subjectWithOctave))) % 12;
+        
+        if (consonantSemitones.includes(semitones)) {
+          return candidatePitch;
+        }
+      }
+      
+      // Fallback: return a third below the subject
+      const thirdBelow = Note.transpose(subjectPC + '3', '-3M');
+      if (thirdBelow) {
+        const tbPC = Note.pitchClass(thirdBelow);
+        // Check if it's in scale, otherwise just use root
+        if (scale.includes(tbPC)) {
+          return tbPC + '3';
+        }
+      }
+      
+      // Ultimate fallback: root of key
+      return key + '3';
+    });
   }
 
   realizeFugueExposition(key, mode, subject, rng) {
@@ -250,13 +329,15 @@ class Planner {
   realizeFinalEntry(key, mode, subject, rng) {
     const notes = [];
 
+    // Subject entry in bass (pedal point effect)
     subject.forEach((pitch, index) => {
       const pitchPC = Note.pitchClass(pitch);
       notes.push({ pitch: pitchPC + '2', duration: '2n', startTime: index * 2, voice: 3 });
     });
 
-    const cadenceLength = subject.length + 3;
-    const progression = Progressions.generate(key, cadenceLength, 'final', mode);
+    // Generate progression for upper voices during subject
+    const subjectDuration = subject.length;
+    const progression = Progressions.generate(key, subjectDuration, 'final-upper', mode);
     const voicings = Leading.connectChords(progression.progression, rng);
 
     voicings.forEach((voicing, index) => {
@@ -266,14 +347,35 @@ class Planner {
       notes.push({ pitch: voicing.T, duration: '2n', startTime, voice: 2 });
     });
 
-    const finalChord = voicings[voicings.length - 1];
-    if (finalChord) {
-      const finalTime = voicings.length * 2;
-      notes.push({ pitch: finalChord.S, duration: '1n', startTime: finalTime, voice: 0 });
-      notes.push({ pitch: finalChord.A, duration: '1n', startTime: finalTime, voice: 1 });
-      notes.push({ pitch: finalChord.T, duration: '1n', startTime: finalTime, voice: 2 });
-      notes.push({ pitch: key + '2', duration: '1n', startTime: finalTime, voice: 3 });
-    }
+    // EXPLICIT FINAL CADENCE: Must resolve to tonic in ORIGINAL key
+    // This ensures the piece ends properly regardless of any modulation
+    const finalCadence = Progressions.getFinalCadence(mode);
+    const cadenceStartTime = subjectDuration * 2;
+
+    // Realize the final cadence chords
+    const cadenceChords = finalCadence.map(chord => {
+      const chordName = require('tonal').Progression.fromRomanNumerals(key, [chord.numeral])[0];
+      return {
+        name: chordName,
+        inversion: chord.inversion,
+        numeral: chord.numeral,
+        seventh: chord.numeral.includes('7')
+      };
+    });
+
+    const cadenceVoicings = Leading.connectChords(cadenceChords, rng);
+
+    cadenceVoicings.forEach((voicing, index) => {
+      const startTime = cadenceStartTime + index * 2;
+      const isLastChord = index === cadenceVoicings.length - 1;
+      const duration = isLastChord ? '1n' : '2n';  // Final chord is longer
+
+      notes.push({ pitch: voicing.S, duration, startTime, voice: 0 });
+      notes.push({ pitch: voicing.A, duration, startTime, voice: 1 });
+      notes.push({ pitch: voicing.T, duration, startTime, voice: 2 });
+      notes.push({ pitch: voicing.B, duration, startTime, voice: 3 });
+    });
+
     return notes;
   }
 }
