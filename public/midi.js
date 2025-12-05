@@ -30,10 +30,10 @@ async function initMidi() {
 
     // Request MIDI access
     midiAccess = await navigator.requestMIDIAccess();
-    
+
     // Set up event listeners for device changes
     midiAccess.onstatechange = updateDeviceList;
-    
+
     console.log("MIDI initialized successfully");
     return true;
   } catch (error) {
@@ -48,7 +48,7 @@ async function initMidi() {
  */
 function getOutputDevices() {
   if (!midiAccess) return [];
-  
+
   const devices = [];
   for (const output of midiAccess.outputs.values()) {
     devices.push({
@@ -56,7 +56,7 @@ function getOutputDevices() {
       name: output.name || `MIDI Device ${output.id}`
     });
   }
-  
+
   return devices;
 }
 
@@ -67,13 +67,13 @@ function getOutputDevices() {
  */
 function selectOutputDevice(deviceId) {
   if (!midiAccess) return false;
-  
+
   selectedOutput = midiAccess.outputs.get(deviceId);
   if (selectedOutput) {
     console.log(`Selected MIDI output: ${selectedOutput.name}`);
     return true;
   }
-  
+
   console.error(`MIDI output device not found: ${deviceId}`);
   return false;
 }
@@ -93,7 +93,7 @@ function setMidiEnabled(enabled) {
  */
 function sendMidiMessage(message) {
   if (!midiEnabled || !selectedOutput) return;
-  
+
   try {
     selectedOutput.send(message);
   } catch (error) {
@@ -108,17 +108,19 @@ function sendMidiMessage(message) {
  */
 function pitchToMidiNote(pitch) {
   if (!pitch || pitch.length < 2) return 60; // Default to middle C
-  
-  const noteNames = { 'C': 0, 'C#': 1, 'Db': 1, 'D': 2, 'D#': 3, 'Eb': 3, 
-                     'E': 4, 'F': 5, 'F#': 6, 'Gb': 6, 'G': 7, 'G#': 8, 
-                     'Ab': 8, 'A': 9, 'A#': 10, 'Bb': 10, 'B': 11 };
-  
+
+  const noteNames = {
+    'C': 0, 'C#': 1, 'Db': 1, 'D': 2, 'D#': 3, 'Eb': 3,
+    'E': 4, 'F': 5, 'F#': 6, 'Gb': 6, 'G': 7, 'G#': 8,
+    'Ab': 8, 'A': 9, 'A#': 10, 'Bb': 10, 'B': 11
+  };
+
   const note = pitch.substring(0, pitch.length - 1);
   const octave = parseInt(pitch[pitch.length - 1]);
-  
+
   const noteNumber = noteNames[note];
   if (noteNumber === undefined) return 60; // Default to middle C
-  
+
   return noteNumber + (octave + 1) * 12;
 }
 
@@ -130,10 +132,10 @@ function pitchToMidiNote(pitch) {
  */
 function noteOn(pitch, velocity = 100, voiceIndex = 0) {
   if (!midiEnabled || !selectedOutput || voiceIndex < 0 || voiceIndex >= 4) return;
-  
+
   const midiNote = pitchToMidiNote(pitch);
   const channel = voiceConfig[voiceIndex].channel - 1; // MIDI channels are 0-15
-  
+
   // Note on message: [0x90 + channel, note, velocity]
   sendMidiMessage([0x90 + channel, midiNote, velocity]);
 }
@@ -145,10 +147,10 @@ function noteOn(pitch, velocity = 100, voiceIndex = 0) {
  */
 function noteOff(pitch, voiceIndex = 0) {
   if (!midiEnabled || !selectedOutput || voiceIndex < 0 || voiceIndex >= 4) return;
-  
+
   const midiNote = pitchToMidiNote(pitch);
   const channel = voiceConfig[voiceIndex].channel - 1; // MIDI channels are 0-15
-  
+
   // Note off message: [0x80 + channel, note, velocity]
   sendMidiMessage([0x80 + channel, midiNote, 0]);
 }
@@ -160,15 +162,15 @@ function noteOff(pitch, voiceIndex = 0) {
  */
 function setVoiceVolume(voiceIndex, volume) {
   if (voiceIndex < 0 || voiceIndex >= 4) return;
-  
+
   // Clamp volume to valid range
   volume = Math.max(0, Math.min(127, volume));
   voiceConfig[voiceIndex].volume = volume;
-  
+
   if (!midiEnabled || !selectedOutput) return;
-  
+
   const channel = voiceConfig[voiceIndex].channel - 1;
-  
+
   // Control change message for volume (CC 7): [0xB0 + channel, 7, volume]
   sendMidiMessage([0xB0 + channel, 7, volume]);
 }
@@ -180,15 +182,15 @@ function setVoiceVolume(voiceIndex, volume) {
  */
 function setVoicePan(voiceIndex, pan) {
   if (voiceIndex < 0 || voiceIndex >= 4) return;
-  
+
   // Clamp pan to valid range
   pan = Math.max(0, Math.min(127, pan));
   voiceConfig[voiceIndex].pan = pan;
-  
+
   if (!midiEnabled || !selectedOutput) return;
-  
+
   const channel = voiceConfig[voiceIndex].channel - 1;
-  
+
   // Control change message for pan (CC 10): [0xB0 + channel, 10, pan]
   sendMidiMessage([0xB0 + channel, 10, pan]);
 }
@@ -200,7 +202,7 @@ function setVoicePan(voiceIndex, pan) {
  */
 function setVoiceChannel(voiceIndex, channel) {
   if (voiceIndex < 0 || voiceIndex >= 4) return;
-  
+
   // Clamp channel to valid range
   channel = Math.max(1, Math.min(16, channel));
   voiceConfig[voiceIndex].channel = channel;
@@ -212,10 +214,10 @@ function setVoiceChannel(voiceIndex, channel) {
  */
 function autoPanVoices(voiceCount = 4) {
   if (voiceCount < 1 || voiceCount > 4) return;
-  
+
   // Calculate pan positions based on voice count
   const panPositions = [];
-  
+
   if (voiceCount === 1) {
     panPositions.push(63); // Center
   } else if (voiceCount === 2) {
@@ -226,7 +228,7 @@ function autoPanVoices(voiceCount = 4) {
     // For 4 voices: Soprano (right), Alto (center-right), Tenor (center-left), Bass (left)
     panPositions.push(127, 84, 42, 0); // Far Right, Right, Left, Far Left
   }
-  
+
   // Apply pan positions to voices
   for (let i = 0; i < voiceCount; i++) {
     setVoicePan(i, panPositions[i]);
@@ -239,10 +241,10 @@ function autoPanVoices(voiceCount = 4) {
 function updateDeviceList() {
   const deviceSelect = document.getElementById('midiOutputSelect');
   if (!deviceSelect) return;
-  
+
   // Clear current options
   deviceSelect.innerHTML = '';
-  
+
   // Add available devices
   const devices = getOutputDevices();
   if (devices.length === 0) {
