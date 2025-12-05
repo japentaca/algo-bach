@@ -158,7 +158,178 @@ const Melodic = {
       return Note.fromMidi(lower + 2); // Major 2nd from bottom
     }
     return null;
+  },
+
+  /**
+   * Adds neighbor tones (approach by step, return by step)
+   * @param {object[]} notes - Array of notes
+   * @param {string} key - Key of the piece
+   */
+  addNeighborTones: (notes, key) => {
+    const ornamentedNotes = [];
+    const scale = Scale.get(`${key} major`).notes;
+    const scaleSet = new Set(scale);
+
+    // Group by voice
+    const voices = [[], [], [], []];
+    notes.forEach(n => voices[n.voice].push(n));
+
+    voices.forEach(voiceNotes => {
+      for (let i = 0; i < voiceNotes.length; i++) {
+        const current = voiceNotes[i];
+        const next = voiceNotes[i + 1];
+
+        if (!next || Math.random() > 0.4) {
+          // 60% chance to skip neighbor tones (for variety)
+          ornamentedNotes.push(current);
+          continue;
+        }
+
+        // Find a neighbor tone (step above or below)
+        const currentPC = Note.pitchClass(current.pitch);
+        const currentOctave = Note.octave(current.pitch);
+
+        // Try to find a neighbor note in the scale
+        const scaleIndex = scale.findIndex(n => n === currentPC);
+        if (scaleIndex !== -1) {
+          // Get upper or lower neighbor
+          const neighbor = Math.random() > 0.5
+            ? scale[(scaleIndex + 1) % scale.length]
+            : scale[(scaleIndex - 1 + scale.length) % scale.length];
+
+          const neighborPitch = neighbor + currentOctave;
+
+          // Add current note shortened
+          ornamentedNotes.push({
+            ...current,
+            duration: "4n"
+          });
+
+          // Add neighbor tone
+          ornamentedNotes.push({
+            pitch: neighborPitch,
+            duration: "4n",
+            startTime: current.startTime + 1,
+            voice: current.voice,
+            type: 'neighbor'
+          });
+        } else {
+          ornamentedNotes.push(current);
+        }
+      }
+    });
+
+    return ornamentedNotes.sort((a, b) => a.startTime - b.startTime);
+  },
+
+  /**
+   * Adds appoggiaturas (accented non-chord tone resolving by step)
+   * @param {object[]} notes - Array of notes
+   * @param {object[]} progression - Chord progression
+   * @param {string} key - Key of the piece
+   */
+  addAppoggiature: (notes, progression, key) => {
+    const ornamentedNotes = [];
+
+    // Group notes by chord index
+    const notesByChord = {};
+    notes.forEach(n => {
+      const chordIndex = Math.floor(n.startTime / 2);
+      if (!notesByChord[chordIndex]) notesByChord[chordIndex] = [];
+      notesByChord[chordIndex].push(n);
+    });
+
+    for (let i = 0; i < progression.length; i++) {
+      const currentNotes = notesByChord[i] || [];
+
+      // Randomly add appoggiaturas to soprano voice
+      if (Math.random() > 0.6 && currentNotes.length > 0) {
+        const sopranoNote = currentNotes.find(n => n.voice === 0);
+
+        if (sopranoNote) {
+          const midi = Note.midi(sopranoNote.pitch);
+          // Appoggiatura approaches from a step away
+          const approachMidi = Math.random() > 0.5 ? midi + 2 : midi - 2;
+          const approachPitch = Note.fromMidi(approachMidi);
+
+          // Add the appoggiatura (non-harmonic tone, accented)
+          ornamentedNotes.push({
+            pitch: approachPitch,
+            duration: "4n",
+            startTime: sopranoNote.startTime - 1,
+            voice: 0,
+            type: 'appoggiatura'
+          });
+
+          // Modify original note to be resolution
+          ornamentedNotes.push({
+            ...sopranoNote,
+            duration: "4n",
+            startTime: sopranoNote.startTime,
+            type: 'resolution'
+          });
+
+          // Add other voices
+          currentNotes.filter(n => n.voice !== 0).forEach(n => {
+            ornamentedNotes.push(n);
+          });
+        } else {
+          currentNotes.forEach(n => ornamentedNotes.push(n));
+        }
+      } else {
+        currentNotes.forEach(n => ornamentedNotes.push(n));
+      }
+    }
+
+    return ornamentedNotes.sort((a, b) => a.startTime - b.startTime);
+  },
+
+  /**
+   * Adds 9-8 suspensions (upper voice anticipation)
+   * @param {object[]} notes - Array of notes
+   */
+  add98Suspension: (notes) => {
+    const ornamentedNotes = [];
+    const voices = [[], [], [], []];
+    notes.forEach(n => voices[n.voice].push(n));
+
+    voices.forEach(voiceNotes => {
+      for (let i = 0; i < voiceNotes.length; i++) {
+        const current = voiceNotes[i];
+        const next = voiceNotes[i + 1];
+
+        if (!next || Math.random() > 0.3) {
+          ornamentedNotes.push(current);
+          continue;
+        }
+
+        // Create a 9-8 suspension if next note is lower
+        const currentMidi = Note.midi(current.pitch);
+        const nextMidi = Note.midi(next.pitch);
+
+        if (nextMidi < currentMidi && nextMidi >= currentMidi - 2) {
+          // Can create suspension
+          ornamentedNotes.push({
+            ...current,
+            duration: "4n"
+          });
+
+          ornamentedNotes.push({
+            pitch: Note.fromMidi(currentMidi),
+            duration: "4n",
+            startTime: current.startTime + 1,
+            voice: current.voice,
+            type: 'suspension'
+          });
+        } else {
+          ornamentedNotes.push(current);
+        }
+      }
+    });
+
+    return ornamentedNotes.sort((a, b) => a.startTime - b.startTime);
   }
 };
 
 module.exports = Melodic;
+

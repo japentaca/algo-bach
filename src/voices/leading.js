@@ -77,7 +77,7 @@ const Leading = {
     let minCost = Infinity;
 
     candidates.forEach(voicing => {
-      const cost = Leading.evaluateTransition(prevVoicing, voicing);
+      const cost = Leading.evaluateTransition(prevVoicing, voicing, 'C', nextChordData);
       if (cost < minCost) {
         minCost = cost;
         bestVoicing = voicing;
@@ -113,7 +113,14 @@ const Leading = {
             if (Note.midi(s) > Note.midi(a) &&
               Note.midi(a) > Note.midi(t) &&
               Note.midi(t) > Note.midi(b)) {
-              candidates.push({ S: s, A: a, T: t, B: b });
+
+              // Check voice spacing: S-A ≤ 8ve, A-T ≤ 8ve (bass can exceed octave from tenor)
+              const saSpacing = Note.midi(s) - Note.midi(a);
+              const atSpacing = Note.midi(a) - Note.midi(t);
+
+              if (saSpacing <= 12 && atSpacing <= 12) {
+                candidates.push({ S: s, A: a, T: t, B: b });
+              }
             }
           });
         });
@@ -146,7 +153,7 @@ const Leading = {
    * Returns a cost (lower is better).
    * Infinity = Forbidden.
    */
-  evaluateTransition: (v1, v2) => {
+  evaluateTransition: (v1, v2, key = 'C', chordData = null) => {
     let cost = 0;
 
     // 1. Smoothness (minimize movement)
@@ -157,7 +164,7 @@ const Leading = {
 
     cost += (distS + distA + distT + distB);
 
-    // 2. Forbidden Parallels (5ths and 8ves)
+    // 2. Forbidden Parallels and Hidden 5ths/8ves
     const voices = ['S', 'A', 'T', 'B'];
     for (let i = 0; i < voices.length; i++) {
       for (let j = i + 1; j < voices.length; j++) {
@@ -176,11 +183,68 @@ const Leading = {
           if (motion === 'parallel') {
             return Infinity; // FORBIDDEN!
           }
+
+          // Penalize hidden (similar) motion to perfect intervals
+          if (motion === 'similar') {
+            cost += 50; // Hidden 5ths/8ves penalty
+          }
         }
       }
     }
 
+    // 3. Seventh Chord Resolution (if present)
+    // Seventh should resolve down by step in any voice
+    if (chordData && chordData.seventh) {
+      const resolveSeventhChord = Leading.check7thResolution(v1, v2, chordData);
+      cost += resolveSeventhChord;
+    }
+
     return cost;
+  },
+
+  /**
+   * Checks if 7th chord resolves properly (7th resolves down)
+   * @param {object} v1 - Current voicing with potential 7th
+   * @param {object} v2 - Next voicing
+   * @param {object} chordData - Chord information
+   * @returns {number} Penalty if not resolved (0-30)
+   */
+  check7thResolution: (v1, v2, chordData) => {
+    const Scales = require('../theory/scales');
+    let penalty = 0;
+
+    // Find the 7th of the chord (if it's a 7th chord)
+    // For dominant 7th (V7), the 7th is a major 7th from root
+    if (chordData.numeral === 'V' || chordData.numeral === 'V7') {
+      // Get chord notes to identify the 7th
+      try {
+        const chord = Chord.get(chordData.name);
+        if (chord.notes.length >= 4) {
+          // Usually 4th note is the 7th in extended chords
+          const seventhPC = Note.pitchClass(chord.notes[3]);
+          const voices = ['S', 'A', 'T', 'B'];
+
+          // Check each voice - if it has the 7th, it should resolve down
+          voices.forEach(voice => {
+            if (Note.pitchClass(v1[voice]) === seventhPC) {
+              // The 7th should move down by step in v2
+              const v1Midi = Note.midi(v1[voice]);
+              const v2Midi = Note.midi(v2[voice]);
+              const diff = v2Midi - v1Midi;
+
+              // Should be -2 (down 1 step, either major or minor)
+              if (diff !== -1 && diff !== -2) {
+                penalty += 20; // Unresolved or wrongly resolved 7th
+              }
+            }
+          });
+        }
+      } catch (e) {
+        // Silently fail if chord analysis isn't available
+      }
+    }
+
+    return penalty;
   },
 
   findNearestChordTone: (prevNote, chordNotes, voicePart) => {
@@ -191,6 +255,44 @@ const Leading = {
 
   findNearestNote: (prevNote, targetPitchClass, voicePart) => {
     return Leading.findNearestChordTone(prevNote, [targetPitchClass], voicePart);
+  },
+
+  /**
+   * Validates doubling rules for a voicing.
+   * @param {object} voicing - { S, A, T, B } voicing
+   * @param {object} chordData - Chord information
+   * @param {string} key - Tonic for determining leading tone
+   * @returns {number} Penalty cost (0 if valid, >0 if violated)
+   */
+  validateDoubling: (voicing, chordData, key = 'C') => {
+    const Scales = require('../theory/scales');
+    let cost = 0;
+
+    // Count occurrences of each pitch class
+    const voiceNotes = [voicing.S, voicing.A, voicing.T, voicing.B];
+    const pitchClasses = voiceNotes.map(note => Note.pitchClass(note));
+
+    // Forbidden: Doubling leading tone
+    const leadingTone = Scales.getLeadingTone(key);
+    const leadingTonePC = Note.pitchClass(leadingTone);
+
+    const leadingToneCount = pitchClasses.filter(pc => pc === leadingTonePC).length;
+    if (leadingToneCount > 1) {
+      cost += 100; // Severe penalty for doubling leading tone
+    }
+
+    // Prefer doubling root in root position
+    if (chordData.inversion === 0) {
+      const chordNotes = Chord.get(chordData.name).notes;
+      const rootPC = Note.pitchClass(chordNotes[0]);
+      const rootCount = pitchClasses.filter(pc => pc === rootPC).length;
+
+      if (rootCount === 1) {
+        cost += 5; // Penalty if not doubled (preference, not rule)
+      }
+    }
+
+    return cost;
   }
 };
 

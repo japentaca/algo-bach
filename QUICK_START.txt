@@ -1,0 +1,72 @@
+╔════════════════════════════════════════════════════════════════════╗
+║           BACH GENERATOR - QUICK START GUIDE                       ║
+╚════════════════════════════════════════════════════════════════════╝
+
+THREE WAYS TO RUN:
+
+1. SIMPLEST - See Examples
+   ─────────────────────────────────────────────────────────────────
+   > node example.js
+   
+   Shows 5 working examples of different compositions
+
+2. PROGRAMMATIC - Use in Node.js
+   ─────────────────────────────────────────────────────────────────
+   const {generatePiece} = require('./src/main');
+   const piece = generatePiece({
+     form: 'Chorale',
+     mode: 'major', 
+     key: 'C',
+     duration: 4
+   });
+
+3. WEB SERVER - Interactive API
+   ─────────────────────────────────────────────────────────────────
+   > node server/app.js
+   
+   Open: http://localhost:3000
+   API: http://localhost:3000/api/generate?form=Chorale&mode=major&key=C
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+PARAMETERS:
+
+  form:     Chorale, Prelude, Gigue, Allemande, Courante, Sarabande,
+            Minuet, Fugue, Passacaglia
+  mode:     major or minor
+  key:      C, D, E, F, G, A, B (+ accidentals: C#, Db, etc.)
+  duration: 1-8 bars
+
+EXAMPLES:
+
+  C Major Chorale, 4 bars:
+  > generatePiece({form: 'Chorale', mode: 'major', key: 'C', duration: 4})
+  
+  D Minor Prelude, 3 bars:
+  > generatePiece({form: 'Prelude', mode: 'minor', key: 'D', duration: 3})
+  
+  G Major Gigue, 2 bars:
+  > generatePiece({form: 'Gigue', mode: 'major', key: 'G', duration: 2})
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+RUN TESTS (54 tests, all passing):
+
+  > node test_integration.js
+  > node test_implementation.js
+  > node test_seventh_chords.js
+  > node test_ornaments.js
+  > node test_rhythms.js
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+FEATURES IMPLEMENTED:
+
+  ✓ Voice leading rules (hidden 5ths, spacing, doubling)
+  ✓ Multiple cadence types (PAC, IAC, HC, DC)
+  ✓ Seventh chords (V7, vii°7)
+  ✓ Minor key support (all 12 keys)
+  ✓ Rhythmic variety (form-specific patterns)
+  ✓ Ornaments (passing tones, neighbors, appoggiaturas, suspensions)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

@@ -54,14 +54,22 @@ document.addEventListener('DOMContentLoaded', () => {
       await initAudio();
 
       const form = formSelect.value;
-      const duration = durationSelect.value;
-      console.log(`Fetching: /api/generate?key=C&style=chorale&form=${form}&duration=${duration}`);
+      const durationCategory = durationSelect.value;
+      
+      // Map duration category to number of bars
+      // 1 = short (~1m), 3 = medium (~3m), 5 = long (~5m)
+      // At 120 BPM, 4/4 time: 1 bar = 2 seconds, so:
+      // 1 min = 30 bars, 3 min = 90 bars, 5 min = 150 bars
+      let barsToGenerate = parseInt(durationCategory) * 30;
+      
+      console.log(`Fetching: /api/generate?key=C&style=chorale&form=${form}&duration=${barsToGenerate}`);
 
-      const response = await fetch(`/api/generate?key=C&style=chorale&form=${form}&duration=${duration}`);
+      const response = await fetch(`/api/generate?key=C&style=chorale&form=${form}&duration=${barsToGenerate}`);
       if (!response.ok) throw new Error("Server error");
 
       const data = await response.json();
       console.log("Data received:", data);
+      console.log("Total notes:", data.notes.length);
 
       statusDiv.innerHTML = `
                 <strong>Playing:</strong> ${data.meta.style} in ${data.meta.key}<br>
@@ -69,7 +77,9 @@ document.addEventListener('DOMContentLoaded', () => {
             `;
 
       const now = Tone.now() + 0.5;
-      const beatDuration = 0.6;
+      // At 120 BPM, quarter note = 0.5 seconds
+      // Each "beat unit" in our system = quarter note
+      const beatDuration = 0.5;
 
       data.notes.forEach(note => {
         const humanizeStart = (Math.random() * 0.02) - 0.01;
@@ -78,6 +88,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         let noteBeats = 2;
         if (note.duration === "4n") noteBeats = 1;
+        if (note.duration === "8n") noteBeats = 0.5;
 
         const durationSecs = (noteBeats * beatDuration) - 0.05 + humanizeDuration;
 
@@ -92,7 +103,7 @@ document.addEventListener('DOMContentLoaded', () => {
       });
 
       const lastNote = data.notes[data.notes.length - 1];
-      const lastNoteBeats = lastNote.duration === "4n" ? 1 : 2;
+      const lastNoteBeats = lastNote.duration === "4n" ? 1 : lastNote.duration === "8n" ? 0.5 : 2;
       const durationSecs = (lastNote.startTime * beatDuration) + (lastNoteBeats * beatDuration) + 3;
 
       setTimeout(() => {
