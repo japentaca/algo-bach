@@ -125,6 +125,15 @@
                 <option value="Variations">Variations</option>
                 <option value="Suite">Suite</option>
             </select>
+            <select id="styleSelect">
+                <option value="Strings">Strings (Quartet)</option>
+                <option value="Piano">Piano (Solo)</option>
+                <option value="Woodwinds">Woodwinds (Quartet)</option>
+                <option value="Brass">Brass (Quartet)</option>
+                <option value="Choir">Choir (Chorus)</option>
+                <option value="Harp">Harp (Solo)</option>
+                <option value="Mixed">Mixed Orchestra</option>
+            </select>
             <select id="durationSelect">
                 <option value="1">Short (~1m)</option>
                 <option value="3">Medium (~3m)</option>
@@ -146,6 +155,8 @@
         </div>
         <div id="status">Ready (Click to start audio context)</div>
     </div>
+    <script src="instrumentConfig.js"></script>
+    <script src="sampleLoader.js"></script>
     <script src="player.js"></script>
 </body>
 

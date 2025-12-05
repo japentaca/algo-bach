@@ -4,13 +4,16 @@ document.addEventListener('DOMContentLoaded', () => {
   const statusDiv = document.getElementById('status');
   const formSelect = document.getElementById('formSelect');
   const durationSelect = document.getElementById('durationSelect');
+  const styleSelect = document.getElementById('styleSelect');
 
   if (!playBtn) console.error("playBtn not found!");
   if (!statusDiv) console.error("statusDiv not found!");
 
-  let synths = [];
+  let samplers = [];
+  let volumes = [];  // Volume nodes for dynamics control
   let limiter;
   let currentSeed = null;
+  let currentStyle = 'Strings';  // Default style
 
   // Seed generation function
   function generateUniqueSeed() {
@@ -25,6 +28,14 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  // Handle style selection change
+  if (styleSelect) {
+    styleSelect.addEventListener('change', (e) => {
+      currentStyle = e.target.value;
+      console.log(`Style changed to: ${currentStyle}`);
+    });
+  }
+
   async function initAudio() {
     console.log("Initializing Audio...");
     await Tone.start();
@@ -33,39 +44,67 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!limiter) {
       limiter = new Tone.Limiter(-1).toDestination();
     }
+  }
 
-    if (synths.length === 0) {
-      // Create 4 synths for SATB, each with different panning
-      // Soprano (0): Right (0.4)
-      // Alto (1): Center-Right (0.15)
-      // Tenor (2): Center-Left (-0.15)
-      // Bass (3): Left (-0.4)
-      const pans = [0.4, 0.15, -0.15, -0.4];
+  /**
+   * Create samplers for the selected style with volume control nodes
+   */
+  async function setupSamplers(styleName) {
+    // Dispose old samplers if they exist
+    if (samplers.length > 0) {
+      console.log("Disposing old samplers...");
+      disposeSamplers(samplers);
+      samplers = [];
+      volumes = [];
+    }
 
+    // Panning setup for stereo placement
+    // Soprano (0): Right (0.4)
+    // Alto (1): Center-Right (0.15)
+    // Tenor (2): Center-Left (-0.15)
+    // Bass (3): Left (-0.4)
+    const pans = [0.4, 0.15, -0.15, -0.4];
+
+    statusDiv.innerText = `Loading samples for ${STYLE_PRESETS[styleName].displayName}...`;
+    console.log(`Setting up samplers for style: ${styleName}`);
+
+    try {
+      // Load all samplers for this style
+      const loadedSamplers = await loadStyleSamplers(styleName);
+
+      // Chain each sampler through a Volume node -> Panner -> Limiter
       for (let i = 0; i < 4; i++) {
-        const panner = new Tone.Panner(pans[i]).connect(limiter);
-        const synth = new Tone.PolySynth(Tone.Synth, {
-          oscillator: { type: "sine" },
-          envelope: {
-            attack: 0.02,
-            decay: 0.1,
-            sustain: 0.8,
-            release: 1.2
-          },
-          volume: -10 // Slightly lower volume per voice to prevent clipping
-        }).connect(panner);
-        synths.push(synth);
+        const volume = new Tone.Volume(0).connect(new Tone.Panner(pans[i]).connect(limiter));
+        loadedSamplers[i].connect(volume);
+
+        samplers.push(loadedSamplers[i]);
+        volumes.push(volume);
       }
+
+      console.log(`✓ Samplers setup complete for ${styleName}`);
+      return true;
+    } catch (error) {
+      console.error(`Error loading samplers: ${error.message}`);
+      statusDiv.innerText = `Error loading samples: ${error.message}`;
+      return false;
     }
   }
 
   async function generateAndPlay() {
     console.log("Generate button clicked");
-    statusDiv.innerText = "Generating...";
+    statusDiv.innerText = "Initializing audio...";
     playBtn.disabled = true;
 
     try {
+      // Initialize audio context
       await initAudio();
+
+      // Load samplers for selected style
+      const samplerSetupSuccess = await setupSamplers(currentStyle);
+      if (!samplerSetupSuccess) {
+        playBtn.disabled = false;
+        return;
+      }
 
       const form = formSelect.value;
       const durationCategory = durationSelect.value;
@@ -98,6 +137,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       statusDiv.innerHTML = `
                 <strong>Playing:</strong> ${data.meta.style} in ${data.meta.key} ${data.meta.mode}<br>
+                <strong>Style:</strong> ${STYLE_PRESETS[currentStyle].displayName}<br>
                 <strong>Progression:</strong> ${data.meta.progression}
             `;
 
@@ -117,14 +157,22 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const durationSecs = (noteBeats * beatDuration) - 0.05 + humanizeDuration;
 
+        // Velocity for dynamics
         let velocity = 0.7 + (Math.random() * 0.1);
-        if (note.voice === 3) velocity = 0.8;
-        if (note.voice === 0) velocity = 0.8;
+        if (note.voice === 3) velocity = 0.8;  // Bass slightly louder
+        if (note.voice === 0) velocity = 0.8;  // Soprano slightly louder
 
-        // Trigger the correct synth based on voice index
-        // Ensure voice index is within bounds (0-3)
+        // Convert velocity to decibels for volume control
+        const volumeDb = velocityToDb(velocity);
+
+        // Trigger the correct sampler based on voice index
         const voiceIndex = Math.min(Math.max(note.voice, 0), 3);
-        synths[voiceIndex].triggerAttackRelease(note.pitch, durationSecs, time, velocity);
+
+        // Set volume for this note
+        volumes[voiceIndex].volume.value = volumeDb;
+
+        // Trigger the note
+        samplers[voiceIndex].triggerAttackRelease(note.pitch, durationSecs, time, velocity);
       });
 
       const lastNote = data.notes[data.notes.length - 1];
