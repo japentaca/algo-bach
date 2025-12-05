@@ -53,26 +53,26 @@ function getDurationBeats(duration) {
 function wouldCauseDissonance(ornamentPitch, ornamentTime, ornamentDuration, ornamentVoice, allNotes) {
   const ornamentEnd = ornamentTime + ornamentDuration;
   const harshIntervals = ['2m', '2M', '7m', '7M', '9m', '9M'];
-  
+
   for (const note of allNotes) {
     // Skip same voice
     if (note.voice === ornamentVoice) continue;
-    
+
     // Check if this note overlaps in time with the ornament
     const noteEnd = note.startTime + getDurationBeats(note.duration);
     const overlaps = note.startTime < ornamentEnd && noteEnd > ornamentTime;
-    
+
     if (overlaps) {
       // Check the interval
       const interval = Interval.distance(ornamentPitch, note.pitch);
       const simple = Interval.simplify(interval);
-      
+
       if (harshIntervals.includes(simple)) {
         return true; // Would cause harsh dissonance
       }
     }
   }
-  
+
   return false; // No harsh dissonance
 }
 
@@ -87,54 +87,54 @@ function wouldCauseDissonance(ornamentPitch, ornamentTime, ornamentDuration, orn
 function fixFugueDissonances(notes, key, mode = 'major') {
   const harshIntervals = ['2m', '2M', '7m', '7M', '9m', '9M'];
   const consonantSemitones = [0, 3, 4, 5, 7, 8, 9, 12]; // unison, 3m, 3M, 4P, 5P, 6m, 6M, 8P
-  
+
   const scaleType = mode === 'minor' ? 'natural minor' : 'major';
   const scaleData = Scale.get(`${key} ${scaleType}`);
   const scale = scaleData.notes && scaleData.notes.length > 0 ? scaleData.notes : ['C', 'D', 'E', 'F', 'G', 'A', 'B'];
-  
+
   // Sort by time
   const sortedNotes = [...notes].sort((a, b) => a.startTime - b.startTime);
   const adjusted = new Set();
-  
+
   for (let i = 0; i < sortedNotes.length; i++) {
     if (adjusted.has(i)) continue;
-    
+
     const note = sortedNotes[i];
     const noteEnd = note.startTime + getDurationBeats(note.duration);
-    
+
     for (let j = 0; j < sortedNotes.length; j++) {
       if (i === j) continue;
       if (adjusted.has(i)) break; // Stop if we already adjusted this note
-      
+
       const other = sortedNotes[j];
       if (note.voice === other.voice) continue;
-      
+
       const otherEnd = other.startTime + getDurationBeats(other.duration);
       const overlaps = note.startTime < otherEnd && noteEnd > other.startTime;
-      
+
       if (overlaps) {
         const interval = Interval.distance(note.pitch, other.pitch);
         const simple = Interval.simplify(interval);
-        
+
         if (harshIntervals.includes(simple)) {
           // Determine which note to adjust: prefer adjusting non-subject notes
           // In a fugue, lower voices often have the subject, upper voices are freer
           const noteToAdjust = (note.voice > other.voice) ? i : j;
           const referenceNote = (noteToAdjust === i) ? other : note;
           const targetNote = sortedNotes[noteToAdjust];
-          
+
           // Skip if already adjusted
           if (adjusted.has(noteToAdjust)) continue;
-          
+
           // Find a consonant pitch in the same octave
           const originalOctave = Note.octave(targetNote.pitch);
           const refPC = Note.pitchClass(referenceNote.pitch);
           const refWithOctave = refPC + '4';
-          
+
           for (const candidatePC of scale) {
             const candidatePitch = candidatePC + originalOctave;
             const semitones = Math.abs(Interval.semitones(Interval.distance(candidatePitch, refWithOctave))) % 12;
-            
+
             if (consonantSemitones.includes(semitones)) {
               targetNote.pitch = candidatePitch;
               adjusted.add(noteToAdjust);
@@ -145,7 +145,7 @@ function fixFugueDissonances(notes, key, mode = 'major') {
       }
     }
   }
-  
+
   return sortedNotes.sort((a, b) => a.startTime - b.startTime);
 }
 
@@ -158,37 +158,37 @@ function fixFugueDissonances(notes, key, mode = 'major') {
  */
 function removeDissonantOrnaments(notes) {
   const harshIntervals = ['2m', '2M', '7m', '7M', '9m', '9M'];
-  
+
   // Sort by time
   const sortedNotes = [...notes].sort((a, b) => a.startTime - b.startTime);
-  
+
   // First pass: identify ornaments that create dissonances
   const toRemove = new Set();
-  
+
   for (let i = 0; i < sortedNotes.length; i++) {
     if (toRemove.has(i)) continue;
-    
+
     const note = sortedNotes[i];
     const noteEnd = note.startTime + getDurationBeats(note.duration);
     const noteIsOrnament = note.type && note.type !== 'base' && note.type !== 'resolution';
-    
+
     for (let j = 0; j < sortedNotes.length; j++) {
       if (i === j) continue;
       if (toRemove.has(j)) continue;
-      
+
       const other = sortedNotes[j];
       if (note.voice === other.voice) continue;
-      
+
       const otherEnd = other.startTime + getDurationBeats(other.duration);
       const overlaps = note.startTime < otherEnd && noteEnd > other.startTime;
-      
+
       if (overlaps) {
         const interval = Interval.distance(note.pitch, other.pitch);
         const simple = Interval.simplify(interval);
-        
+
         if (harshIntervals.includes(simple)) {
           const otherIsOrnament = other.type && other.type !== 'base' && other.type !== 'resolution';
-          
+
           // Remove the ornament, keep the base note
           if (noteIsOrnament && !otherIsOrnament) {
             toRemove.add(i);
@@ -209,10 +209,10 @@ function removeDissonantOrnaments(notes) {
       }
     }
   }
-  
+
   // Build result excluding removed notes
   const result = sortedNotes.filter((_, i) => !toRemove.has(i));
-  
+
   return result.sort((a, b) => a.startTime - b.startTime);
 }
 
@@ -667,8 +667,8 @@ const Melodic = {
 
         // Only add trills to longer notes (half notes or longer)
         const durationBeats = current.duration === '1n' ? 4 :
-                              current.duration === '2n' ? 2 :
-                              current.duration === '4n' ? 1 : 0.5;
+          current.duration === '2n' ? 2 :
+            current.duration === '4n' ? 1 : 0.5;
 
         if (durationBeats < 2) {
           ornamentedNotes.push(current);
@@ -695,10 +695,10 @@ const Melodic = {
 
         // Get upper neighbor (next scale degree)
         const upperPC = scale[(scaleIndex + 1) % scale.length];
-        const upperMidi = currentMidi + (scale.indexOf(upperPC) > scaleIndex ? 
-          (Note.midi(upperPC + currentOctave) - currentMidi) : 
+        const upperMidi = currentMidi + (scale.indexOf(upperPC) > scaleIndex ?
+          (Note.midi(upperPC + currentOctave) - currentMidi) :
           (Note.midi(upperPC + (currentOctave + 1)) - currentMidi));
-        
+
         // Calculate semitones to upper neighbor for proper octave
         let upperPitch;
         const tentativeUpper = Note.fromMidi(currentMidi + 1);
@@ -778,8 +778,8 @@ const Melodic = {
 
         // Only on notes with at least 1 beat duration
         const durationBeats = current.duration === '1n' ? 4 :
-                              current.duration === '2n' ? 2 :
-                              current.duration === '4n' ? 1 : 0.5;
+          current.duration === '2n' ? 2 :
+            current.duration === '4n' ? 1 : 0.5;
 
         if (durationBeats < 1) {
           ornamentedNotes.push(current);
@@ -848,8 +848,8 @@ const Melodic = {
         // Return to main note (remaining duration)
         const remainingBeats = durationBeats - (mordentStep * 2);
         const remainingDuration = remainingBeats >= 1.5 ? "2n" :
-                                  remainingBeats >= 0.75 ? "4n" :
-                                  remainingBeats >= 0.375 ? "8n" : "16n";
+          remainingBeats >= 0.75 ? "4n" :
+            remainingBeats >= 0.375 ? "8n" : "16n";
 
         ornamentedNotes.push({
           pitch: current.pitch,
@@ -893,8 +893,8 @@ const Melodic = {
 
         // Need at least quarter note for turn
         const durationBeats = current.duration === '1n' ? 4 :
-                              current.duration === '2n' ? 2 :
-                              current.duration === '4n' ? 1 : 0.5;
+          current.duration === '2n' ? 2 :
+            current.duration === '4n' ? 1 : 0.5;
 
         if (durationBeats < 1) {
           ornamentedNotes.push(current);
@@ -928,7 +928,7 @@ const Melodic = {
 
         // Check if turn neighbors would cause dissonance
         if (wouldCauseDissonance(upperPitch, current.startTime, 0.5, current.voice, notes) ||
-            wouldCauseDissonance(lowerPitch, current.startTime, 0.75, current.voice, notes)) {
+          wouldCauseDissonance(lowerPitch, current.startTime, 0.75, current.voice, notes)) {
           ornamentedNotes.push(current);
           continue;
         }
@@ -966,8 +966,8 @@ const Melodic = {
         // Return to main (remaining duration)
         const remainingBeats = durationBeats - (turnStep * 3);
         const remainingDuration = remainingBeats >= 1.5 ? "2n" :
-                                  remainingBeats >= 0.75 ? "4n" :
-                                  remainingBeats >= 0.375 ? "8n" : "16n";
+          remainingBeats >= 0.75 ? "4n" :
+            remainingBeats >= 0.375 ? "8n" : "16n";
 
         ornamentedNotes.push({
           pitch: current.pitch,
@@ -991,7 +991,7 @@ const Melodic = {
   cleanDissonances: (notes) => {
     return removeDissonantOrnaments(notes);
   },
-  
+
   /**
    * Fix base note dissonances in fugue counterpoint
    * Adjusts clashing base notes to consonant pitches

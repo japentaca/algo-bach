@@ -62,7 +62,7 @@ class Planner {
     const withTrills = Melodic.addTrills(with98, key, mode, ornamentConfig);
     const withMordents = Melodic.addMordents(withTrills, key, mode, ornamentConfig);
     const withTurns = Melodic.addTurns(withMordents, key, mode, ornamentConfig);
-    
+
     // Final cleanup: remove any ornaments that create harsh dissonances between voices
     const ornamentedNotes = Melodic.cleanDissonances(withTurns);
 
@@ -136,7 +136,7 @@ class Planner {
       const with98 = Melodic.add98Suspension(withNeighbors, updatedConfig);
       const withTrills = Melodic.addTrills(with98, key, mode, updatedConfig);
       const withMordents = Melodic.addMordents(withTrills, key, mode, updatedConfig);
-      
+
       // Final cleanup: remove dissonant ornaments
       ornamentedNotes = Melodic.cleanDissonances(withMordents);
     }
@@ -188,28 +188,28 @@ class Planner {
     const scaleType = mode === 'minor' ? 'natural minor' : 'major';
     const scaleData = Scale.get(`${key} ${scaleType}`);
     const scale = scaleData.notes && scaleData.notes.length > 0 ? scaleData.notes : ['C', 'D', 'E', 'F', 'G', 'A', 'B'];
-    
+
     // Define consonant intervals from the subject note
     // 3rds, 4ths, 5ths, 6ths, octaves are consonant
     const consonantSemitones = [3, 4, 5, 7, 8, 9, 12, 0]; // 3m, 3M, 4P, 5P, 6m, 6M, 8P, unison
-    
+
     return subject.map((subjectPitch) => {
       const subjectPC = Note.pitchClass(subjectPitch);
-      
+
       // Try to find a consonant scale degree
       // Shuffle scale notes and pick first consonant one
       const shuffledScale = [...scale].sort(() => rng() - 0.5);
-      
+
       for (const candidatePC of shuffledScale) {
         const candidatePitch = candidatePC + '3';
         const subjectWithOctave = subjectPC + '4'; // Subject is typically in octave 4
         const semitones = Math.abs(Interval.semitones(Interval.distance(candidatePitch, subjectWithOctave))) % 12;
-        
+
         if (consonantSemitones.includes(semitones)) {
           return candidatePitch;
         }
       }
-      
+
       // Fallback: return a third below the subject
       const thirdBelow = Note.transpose(subjectPC + '3', '-3M');
       if (thirdBelow) {
@@ -219,7 +219,7 @@ class Planner {
           return tbPC + '3';
         }
       }
-      
+
       // Ultimate fallback: root of key
       return key + '3';
     });

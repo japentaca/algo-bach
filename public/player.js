@@ -343,10 +343,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
       const lastNote = data.notes[data.notes.length - 1];
       const lastNoteBeats = lastNote.duration === "32n" ? 0.125 :
-                            lastNote.duration === "16n" ? 0.25 :
-                            lastNote.duration === "8n" ? 0.5 :
-                            lastNote.duration === "4n" ? 1 :
-                            lastNote.duration === "4n." ? 1.5 : 2;
+        lastNote.duration === "16n" ? 0.25 :
+          lastNote.duration === "8n" ? 0.5 :
+            lastNote.duration === "4n" ? 1 :
+              lastNote.duration === "4n." ? 1.5 : 2;
       const durationSecs = (lastNote.startTime * beatDuration) + (lastNoteBeats * beatDuration) + 3;
 
       setTimeout(() => {
