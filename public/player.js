@@ -46,7 +46,7 @@ document.addEventListener('DOMContentLoaded', () => {
     impulseSelect.addEventListener('change', async (e) => {
       currentImpulse = e.target.value;
       console.log(`Impulse changed to: ${currentImpulse}`);
-      
+
       // If convolver is already initialized, load the new impulse
       if (convolver) {
         if (currentImpulse === 'none') {
@@ -77,11 +77,11 @@ document.addEventListener('DOMContentLoaded', () => {
   if (reverbMixSlider) {
     reverbMixSlider.addEventListener('input', (e) => {
       const mixPercent = parseInt(e.target.value);
-      
+
       if (reverbMixValue) {
         reverbMixValue.innerText = mixPercent;
       }
-      
+
       // Update reverb mix only if reverb is not disabled
       if (currentImpulse !== 'none') {
         updateReverbMix(mixPercent);
@@ -97,14 +97,14 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!limiter) {
       // Create the main output limiter
       limiter = new Tone.Limiter(-1).toDestination();
-      
+
       // Create dry/wet mix nodes
       dryGain = new Tone.Gain(0.75).connect(limiter);  // Default 75% dry (25% wet)
       reverbGain = new Tone.Gain(0.25).connect(limiter);  // Default 25% wet
-      
+
       // Create the convolver (reverb) node
       convolver = new Tone.Convolver({ url: null, normalize: true }).connect(reverbGain);
-      
+
       console.log("✓ Convolver, Gains, and Limiter initialized");
     }
   }
@@ -114,14 +114,14 @@ document.addEventListener('DOMContentLoaded', () => {
    */
   function updateReverbMix(mixPercent) {
     if (!dryGain || !reverbGain) return;
-    
+
     const wetValue = mixPercent / 100;
     const dryValue = 1 - wetValue;
-    
+
     reverbGain.gain.value = wetValue;
     dryGain.gain.value = dryValue;
-    
-    console.log(`Reverb mix updated: ${mixPercent}% wet, ${Math.round((1-wetValue)*100)}% dry`);
+
+    console.log(`Reverb mix updated: ${mixPercent}% wet, ${Math.round((1 - wetValue) * 100)}% dry`);
   }
 
   /**
@@ -154,11 +154,11 @@ document.addEventListener('DOMContentLoaded', () => {
       for (let i = 0; i < 4; i++) {
         const volume = new Tone.Volume(0);
         const panner = new Tone.Panner(pans[i]);
-        
+
         // Connect to both dry and reverb paths
         panner.connect(dryGain);
         panner.connect(convolver);
-        
+
         volume.connect(panner);
         loadedSamplers[i].connect(volume);
 
