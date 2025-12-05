@@ -1,12 +1,14 @@
 const { Note, Interval, Scale, Chord } = require('tonal');
+const Scales = require('../theory/scales');
 
 const Melodic = {
   /**
    * Adds passing tones to a set of notes.
    * @param {object[]} notes - Array of { pitch, duration, startTime, voice }
    * @param {string} key - e.g., "C"
+   * @param {string} mode - 'major' or 'minor'
    */
-  addPassingTones: (notes, key) => {
+  addPassingTones: (notes, key, mode = 'major') => {
     const ornamentedNotes = [];
     // Group by voice
     const voices = [[], [], [], []];
@@ -28,7 +30,8 @@ const Melodic = {
 
         if (semitones === 3 || semitones === 4) {
           // Found a third! Try to add a passing tone.
-          const passingPitch = Melodic.findPassingTone(current.pitch, next.pitch);
+          const isAscending = Note.midi(next.pitch) > Note.midi(current.pitch);
+          const passingPitch = Melodic.findPassingTone(current.pitch, next.pitch, key, mode, isAscending);
 
           if (passingPitch) {
             // 1. Shorten current note
@@ -146,12 +149,41 @@ const Melodic = {
     return finalNotes.sort((a, b) => a.startTime - b.startTime);
   },
 
-  findPassingTone: (p1, p2) => {
+  /**
+   * Finds appropriate passing tone between two pitches.
+   * Uses melodic minor (raised 6th/7th) when ascending in minor keys.
+   * @param {string} p1 - First pitch
+   * @param {string} p2 - Second pitch
+   * @param {string} key - Tonic key
+   * @param {string} mode - 'major' or 'minor'
+   * @param {boolean} isAscending - Direction of melodic motion
+   */
+  findPassingTone: (p1, p2, key = 'C', mode = 'major', isAscending = true) => {
     const midi1 = Note.midi(p1);
     const midi2 = Note.midi(p2);
-    const midMidi = (midi1 + midi2) / 2;
 
+    // For minor mode ascending, use melodic minor (raised 6th and 7th)
+    if (mode === 'minor' && isAscending) {
+      const lower = midi1 < midi2 ? midi1 : midi2;
+      const passingMidi = lower + (Math.abs(midi1 - midi2) === 4 ? 2 : 2);
+      const passingNote = Note.fromMidi(passingMidi);
+      const passingPC = Note.pitchClass(passingNote);
+
+      // Check if this is scale degree 6 or 7 - if so, raise it
+      const minorScale = Scale.get(`${key} minor`).notes;
+      const degree6 = minorScale[5]; // 0-indexed, so 5 = 6th degree
+      const degree7 = minorScale[6]; // 7th degree
+
+      if (passingPC === degree6 || passingPC === degree7) {
+        // Raise by semitone for melodic minor ascending
+        return Note.fromMidi(passingMidi + 1);
+      }
+      return passingNote;
+    }
+
+    // Standard passing tone logic for major or descending minor
     if (Math.abs(midi1 - midi2) === 4) {
+      const midMidi = (midi1 + midi2) / 2;
       return Note.fromMidi(Math.round(midMidi));
     } else if (Math.abs(midi1 - midi2) === 3) {
       const lower = midi1 < midi2 ? midi1 : midi2;

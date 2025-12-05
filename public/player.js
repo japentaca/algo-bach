@@ -10,6 +10,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
   let synths = [];
   let limiter;
+  let currentSeed = null;
+
+  // Seed generation function
+  function generateUniqueSeed() {
+    return 'seed_' + Date.now().toString(36) + '_' + Math.random().toString(36).substr(2, 9);
+  }
+
+  // Update seed display
+  function updateSeedDisplay() {
+    const seedDisplay = document.getElementById('seedDisplay');
+    if (seedDisplay) {
+      seedDisplay.innerText = `Seed: ${currentSeed}`;
+    }
+  }
 
   async function initAudio() {
     console.log("Initializing Audio...");
@@ -55,16 +69,27 @@ document.addEventListener('DOMContentLoaded', () => {
 
       const form = formSelect.value;
       const durationCategory = durationSelect.value;
-      
-      // Map duration category to number of bars
-      // 1 = short (~1m), 3 = medium (~3m), 5 = long (~5m)
-      // At 120 BPM, 4/4 time: 1 bar = 2 seconds, so:
-      // 1 min = 30 bars, 3 min = 90 bars, 5 min = 150 bars
-      let barsToGenerate = parseInt(durationCategory) * 30;
-      
-      console.log(`Fetching: /api/generate?key=C&style=chorale&form=${form}&duration=${barsToGenerate}`);
+      const keySelect = document.getElementById('keySelect');
+      const modeSelect = document.getElementById('modeSelect');
+      const selectedKey = keySelect ? keySelect.value : 'C';
+      const selectedMode = modeSelect ? modeSelect.value : 'major';
+      const randomizeCheck = document.getElementById('randomizeCheck');
 
-      const response = await fetch(`/api/generate?key=C&style=chorale&form=${form}&duration=${barsToGenerate}`);
+      // Generate or use manual seed
+      if (!randomizeCheck || randomizeCheck.checked) {
+        currentSeed = generateUniqueSeed();
+      } else {
+        const seedInput = document.getElementById('seedInput');
+        currentSeed = seedInput ? seedInput.value || generateUniqueSeed() : generateUniqueSeed();
+      }
+      updateSeedDisplay();
+
+      // Map duration category to number of bars
+      let barsToGenerate = parseInt(durationCategory) * 30;
+
+      console.log(`Fetching: /api/generate?key=${selectedKey}&mode=${selectedMode}&form=${form}&duration=${barsToGenerate}&seed=${encodeURIComponent(currentSeed)}`);
+
+      const response = await fetch(`/api/generate?key=${encodeURIComponent(selectedKey)}&mode=${selectedMode}&form=${form}&duration=${barsToGenerate}&seed=${encodeURIComponent(currentSeed)}`);
       if (!response.ok) throw new Error("Server error");
 
       const data = await response.json();
@@ -72,7 +97,7 @@ document.addEventListener('DOMContentLoaded', () => {
       console.log("Total notes:", data.notes.length);
 
       statusDiv.innerHTML = `
-                <strong>Playing:</strong> ${data.meta.style} in ${data.meta.key}<br>
+                <strong>Playing:</strong> ${data.meta.style} in ${data.meta.key} ${data.meta.mode}<br>
                 <strong>Progression:</strong> ${data.meta.progression}
             `;
 

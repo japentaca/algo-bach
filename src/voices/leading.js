@@ -1,6 +1,7 @@
 const { Note, Interval, Chord } = require('tonal');
 const Rules = require('../theory/rules');
 const Allocator = require('./allocator');
+const seedrandom = require('seedrandom');
 
 /**
  * Voice Leading Engine
@@ -12,7 +13,7 @@ const Leading = {
    * Connects a sequence of chords into 4-part harmony.
    * @param {object[]} chordProgression - Array of { name, inversion, numeral }
    */
-  connectChords: (chordProgression) => {
+  connectChords: (chordProgression, rng) => {
     const voicings = [];
 
     // 1. Initial Voicing
@@ -22,7 +23,7 @@ const Leading = {
     // 2. Connect subsequent chords
     for (let i = 1; i < chordProgression.length; i++) {
       const nextChordData = chordProgression[i];
-      const nextVoicing = Leading.findBestVoicing(currentVoicing, nextChordData);
+      const nextVoicing = Leading.findBestVoicing(currentVoicing, nextChordData, rng);
       voicings.push(nextVoicing);
       currentVoicing = nextVoicing;
     }
@@ -49,8 +50,9 @@ const Leading = {
 
   /**
    * Finds the best voicing for the next chord given the previous voicing.
+   * Uses stochastic selection: 70% min-cost, 25% 2nd-best, 5% 3rd-best.
    */
-  findBestVoicing: (prevVoicing, nextChordData) => {
+  findBestVoicing: (prevVoicing, nextChordData, rng) => {
     const chordName = nextChordData.name;
     const inversion = nextChordData.inversion;
     const chordNotes = Chord.get(chordName).notes;
@@ -73,18 +75,32 @@ const Leading = {
       return Leading.createInitialVoicing(nextChordData);
     }
 
-    let bestVoicing = null;
-    let minCost = Infinity;
+    // Rank candidates by cost
+    const rankedCandidates = candidates
+      .map(voicing => ({
+        voicing,
+        cost: Leading.evaluateTransition(prevVoicing, voicing, 'C', nextChordData)
+      }))
+      .sort((a, b) => a.cost - b.cost);
 
-    candidates.forEach(voicing => {
-      const cost = Leading.evaluateTransition(prevVoicing, voicing, 'C', nextChordData);
-      if (cost < minCost) {
-        minCost = cost;
-        bestVoicing = voicing;
+    // Stochastic selection: 70% best, 25% 2nd-best, 5% 3rd-best
+    let selectedVoicing = rankedCandidates[0].voicing;
+
+    if (rng && rankedCandidates.length > 1) {
+      const roll = rng();
+      if (roll < 0.70) {
+        // 70% chance: use best voicing
+        selectedVoicing = rankedCandidates[0].voicing;
+      } else if (roll < 0.95 && rankedCandidates.length > 1) {
+        // 25% chance: use 2nd best
+        selectedVoicing = rankedCandidates[1].voicing;
+      } else if (rankedCandidates.length > 2) {
+        // 5% chance: use 3rd best
+        selectedVoicing = rankedCandidates[2].voicing;
       }
-    });
+    }
 
-    return bestVoicing || candidates[0];
+    return selectedVoicing;
   },
 
   /**
@@ -198,6 +214,23 @@ const Leading = {
       const resolveSeventhChord = Leading.check7thResolution(v1, v2, chordData);
       cost += resolveSeventhChord;
     }
+
+    // 4. Tendency Tone Resolution (Leading Tone → Tonic)
+    // Leading tone (scale degree 7) must resolve UP to tonic
+    const Scales = require('../theory/scales');
+    const leadingTone = Scales.getLeadingTone(key);
+    const tonic = Note.pitchClass(key); // The tonic pitch class
+
+    ['S', 'A', 'T', 'B'].forEach(voice => {
+      const v1PC = Note.pitchClass(v1[voice]);
+      if (v1PC === Note.pitchClass(leadingTone)) {
+        // This voice has the leading tone - check resolution
+        const v2PC = Note.pitchClass(v2[voice]);
+        if (v2PC !== tonic) {
+          cost += 100; // Unresolved leading tone - severe penalty
+        }
+      }
+    });
 
     return cost;
   },

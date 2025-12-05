@@ -141,17 +141,27 @@ const Progressions = {
 
       // 2. Pick a chord from that function
       const candidates = chordFunctions[nextFunction];
-      const nextChordNumeral = candidates[Math.floor(rng() * candidates.length)];
+      let nextChordNumeral = candidates[Math.floor(rng() * candidates.length)];
 
-      // 3. Determine Inversion (Probabilistic)
-      // 0 = Root, 1 = 1st Inv (3rd in bass), 2 = 2nd Inv (5th in bass)
+      // 2b. Stochastic 7th chord addition (8-15% probability)
+      const seventhChance = rng();
+      if (seventhChance < 0.12 && (nextChordNumeral === 'V' || nextChordNumeral === 'v')) {
+        nextChordNumeral = 'V7';
+      } else if (seventhChance < 0.08 && nextChordNumeral === 'vii°') {
+        nextChordNumeral = 'vii°7';
+      }
+
+      // 3. Determine Inversion (Probabilistic - weighted)
+      // Root (50%), 1st Inv (35%), 2nd Inv (15%, rare)
       let inversion = 0;
       const invRoll = rng();
 
-      if (nextChordNumeral === 'V' || nextChordNumeral === 'i' || nextChordNumeral === 'I' || nextChordNumeral === 'iv' || nextChordNumeral === 'IV') {
-        if (invRoll > 0.7) inversion = 1; // 30% chance of 1st inversion
+      if (invRoll < 0.35) {
+        inversion = 1; // 35% chance of 1st inversion (6)
+      } else if (invRoll < 0.50 && (nextChordNumeral === 'V' || nextChordNumeral === 'V7' || nextChordNumeral === 'IV')) {
+        inversion = 2; // 15% chance of 2nd inversion (6/4) - only on certain chords
       }
-      // Note: 2nd inversion (6/4) is special (cadential), handled below or ignored for now to avoid bad style.
+      // Otherwise inversion = 0 (root position) - 50%
 
       progression.push({ numeral: nextChordNumeral, inversion: inversion });
       currentFunction = nextFunction;
@@ -185,8 +195,81 @@ const Progressions = {
 
     return {
       progression: chords,
-      cadenceUsed: cadenceType || 'Auto-selected'
+      cadenceUsed: cadenceType || 'Auto-selected',
+      rng: rng
     };
+  },
+
+  /**
+   * Common Baroque sequences for episodic material
+   */
+  SEQUENCES: {
+    descendingFifths: ['I', 'IV', 'vii°', 'iii', 'vi', 'ii', 'V', 'I'],
+    ascending5ths6ths: ['I', 'V6', 'vi', 'iii6', 'IV', 'I6', 'ii', 'V'],
+    descending3rds: ['I', 'vi', 'IV', 'ii', 'vii°', 'V', 'I'],
+    romanesca: ['I', 'V6', 'vi', 'iii6', 'IV', 'I6', 'IV', 'V']
+  },
+
+  /**
+   * Generates a sequential passage for fugue episodes or development.
+   * @param {string} key - Tonic key
+   * @param {string} sequenceType - Type from SEQUENCES
+   * @param {string} mode - 'major' or 'minor'
+   * @param {number} repetitions - How many times to cycle (default 1)
+   * @returns {object[]} Array of chord objects
+   */
+  generateSequence: (key, sequenceType = 'descendingFifths', mode = 'major', repetitions = 1) => {
+    let sequence = Progressions.SEQUENCES[sequenceType] || Progressions.SEQUENCES.descendingFifths;
+
+    // Adjust for minor mode
+    if (mode === 'minor') {
+      sequence = sequence.map(numeral => {
+        // Convert major numerals to minor equivalents
+        const conversions = {
+          'I': 'i', 'i': 'i',
+          'II': 'ii°', 'ii': 'ii°', 'ii°': 'ii°',
+          'III': 'III', 'iii': 'III',
+          'IV': 'iv', 'iv': 'iv',
+          'V': 'V', 'v': 'V',
+          'VI': 'VI', 'vi': 'VI',
+          'VII': 'vii°', 'vii°': 'vii°'
+        };
+        // Handle inversions (e.g., "V6" -> "V6")
+        const baseNumeral = numeral.replace(/[0-9]/g, '');
+        const inversion = numeral.replace(/[^0-9]/g, '');
+        return (conversions[baseNumeral] || baseNumeral) + inversion;
+      });
+    }
+
+    // Repeat sequence if needed
+    let fullSequence = [];
+    for (let i = 0; i < repetitions; i++) {
+      fullSequence = fullSequence.concat(sequence);
+    }
+
+    // Convert to chord objects with inversions
+    const chords = fullSequence.map(numeral => {
+      let inv = 0;
+      let cleanNumeral = numeral;
+
+      if (numeral.includes('6/4')) {
+        inv = 2;
+        cleanNumeral = numeral.replace('6/4', '');
+      } else if (numeral.includes('6')) {
+        inv = 1;
+        cleanNumeral = numeral.replace('6', '');
+      }
+
+      const chordName = Progression.fromRomanNumerals(key, [cleanNumeral])[0];
+      return {
+        name: chordName,
+        inversion: inv,
+        numeral: cleanNumeral,
+        seventh: cleanNumeral.includes('7')
+      };
+    });
+
+    return chords;
   }
 };
 
