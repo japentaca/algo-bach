@@ -196,6 +196,26 @@
             </select>
             <button id="playBtn">Generate & Play</button>
         </div>
+        <div class="reverb-controls" style="margin-top: 1.5rem;">
+            <h3>✨ Expressivity</h3>
+            <label style="display:block; text-align:left; margin-bottom:0.8rem;">
+                Profile (1 per style default):
+                <select id="expressivityPreset" style="margin-top:0.4rem; width:100%;">
+                    <option value="style">Style Default</option>
+                    <option value="delicate">Delicate</option>
+                    <option value="lyrical">Lyrical</option>
+                    <option value="bold">Bold</option>
+                </select>
+            </label>
+            <label style="display:block; text-align:left; margin:0.6rem 0;">
+                <input type="checkbox" id="randomTextureCheck" checked>
+                Pick 1 of 3 textures randomly (space / dynamics / articulation)
+            </label>
+            <label style="display:block; text-align:left; margin:0.6rem 0;">
+                <input type="checkbox" id="sparseOrnamentsCheck" checked>
+                Keep ornaments sparse near cadences
+            </label>
+        </div>
         <div class="reverb-controls">
             <h3>🎶 Ornaments</h3>
             <div class="reverb-mix-container">

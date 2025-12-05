@@ -5,6 +5,9 @@ document.addEventListener('DOMContentLoaded', () => {
   const formSelect = document.getElementById('formSelect');
   const durationSelect = document.getElementById('durationSelect');
   const styleSelect = document.getElementById('styleSelect');
+  const expressivityPresetSelect = document.getElementById('expressivityPreset');
+  const randomTextureCheck = document.getElementById('randomTextureCheck');
+  const sparseOrnamentsCheck = document.getElementById('sparseOrnamentsCheck');
 
   if (!playBtn) console.error("playBtn not found!");
   if (!statusDiv) console.error("statusDiv not found!");
@@ -262,6 +265,9 @@ document.addEventListener('DOMContentLoaded', () => {
       const selectedKey = keySelect ? keySelect.value : 'C';
       const selectedMode = modeSelect ? modeSelect.value : 'major';
       const randomizeCheck = document.getElementById('randomizeCheck');
+      const expressivityPreset = expressivityPresetSelect ? expressivityPresetSelect.value : 'style';
+      const randomTexture = randomTextureCheck ? randomTextureCheck.checked : true;
+      const sparseOrnaments = sparseOrnamentsCheck ? sparseOrnamentsCheck.checked : true;
 
       // Generate or use manual seed
       if (!randomizeCheck || randomizeCheck.checked) {
@@ -279,9 +285,9 @@ document.addEventListener('DOMContentLoaded', () => {
       const ornamentDensitySlider = document.getElementById('ornamentDensity');
       const ornamentDensity = ornamentDensitySlider ? parseInt(ornamentDensitySlider.value) : 50;
 
-      console.log(`Fetching: /api/generate?key=${selectedKey}&mode=${selectedMode}&form=${form}&duration=${barsToGenerate}&seed=${encodeURIComponent(currentSeed)}&ornamentDensity=${ornamentDensity}`);
+      console.log(`Fetching: /api/generate?key=${selectedKey}&mode=${selectedMode}&form=${form}&duration=${barsToGenerate}&seed=${encodeURIComponent(currentSeed)}&ornamentDensity=${ornamentDensity}&expressivity=${expressivityPreset}&randomTexture=${randomTexture}&sparseOrnaments=${sparseOrnaments}`);
 
-      const response = await fetch(`/api/generate?key=${encodeURIComponent(selectedKey)}&mode=${selectedMode}&form=${form}&duration=${barsToGenerate}&seed=${encodeURIComponent(currentSeed)}&ornamentDensity=${ornamentDensity}`);
+      const response = await fetch(`/api/generate?key=${encodeURIComponent(selectedKey)}&mode=${selectedMode}&form=${form}&duration=${barsToGenerate}&seed=${encodeURIComponent(currentSeed)}&ornamentDensity=${ornamentDensity}&expressivity=${encodeURIComponent(expressivityPreset)}&randomTexture=${randomTexture}&sparseOrnaments=${sparseOrnaments}`);
       if (!response.ok) throw new Error("Server error");
 
       const data = await response.json();
@@ -291,7 +297,8 @@ document.addEventListener('DOMContentLoaded', () => {
       statusDiv.innerHTML = `
                 <strong>Playing:</strong> ${data.meta.style} in ${data.meta.key} ${data.meta.mode}<br>
                 <strong>Style:</strong> ${STYLE_PRESETS[currentStyle].displayName}<br>
-                <strong>Progression:</strong> ${data.meta.progression}
+                <strong>Progression:</strong> ${data.meta.progression}<br>
+                <strong>Expressivity:</strong> ${expressivityPreset} | Random texture: ${randomTexture ? 'on' : 'off'} | Sparse cadences: ${sparseOrnaments ? 'on' : 'off'}
             `;
 
       const now = Tone.now() + 0.5;
