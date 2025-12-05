@@ -1002,6 +1002,31 @@ const Melodic = {
    */
   fixFugueDissonances: (notes, key, mode = 'major') => {
     return fixFugueDissonances(notes, key, mode);
+  },
+
+  /**
+   * Humanize the performance by adding micro-timing variations and velocity dynamics
+   * @param {object[]} notes - The notes to humanize
+   * @param {number} amount - Amount of variation (0-1)
+   * @returns {object[]} Humanized notes
+   */
+  humanize: (notes, amount = 0.1) => {
+    return notes.map(note => {
+      // Timing variation: +/- amount * 0.1 beats
+      const timingOffset = (Math.random() * 2 - 1) * amount * 0.1;
+
+      // Velocity variation: +/- amount * 20
+      // If velocity exists, use it, otherwise default to 80
+      const baseVelocity = note.velocity || 80;
+      const velocityVar = (Math.random() * 2 - 1) * amount * 20;
+      const velocity = Math.max(1, Math.min(127, Math.round(baseVelocity + velocityVar)));
+
+      return {
+        ...note,
+        startTime: Math.max(0, note.startTime + timingOffset),
+        velocity: velocity
+      };
+    });
   }
 };
 
