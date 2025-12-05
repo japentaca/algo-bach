@@ -2,6 +2,8 @@ const Progressions = require('../harmony/progressions');
 const Leading = require('../voices/leading');
 const Melodic = require('../voices/melodic');
 const Rhythms = require('../rhythms/patterns');
+const PhraseStructure = require('./phraseStructure');
+const VoiceInterdependence = require('../voices/interdependence');
 const { Note, Interval, Scale } = require('tonal');
 const seedrandom = require('seedrandom');
 
@@ -29,8 +31,25 @@ class Planner {
       return this.generateFugue(key, mode, formDuration, seed, ornamentConfig);
     }
 
-    // 1. Generate Harmonic Framework (main progression)
-    const progressionData = Progressions.generate(key, formDuration, seed, mode);
+    // 1. Generate Harmonic Framework with Phrase Structure
+    let progressionData;
+    let phraseMarkers;
+
+    // Use phrase structure for more organic forms
+    if (formDuration >= 4) {
+      // Use period structure for longer pieces
+      const phraseData = PhraseStructure.generatePeriod(key, mode, Math.floor(formDuration / 2), seed);
+      progressionData = {
+        progression: phraseData.progression,
+        rng: phraseData.rng
+      };
+      phraseMarkers = phraseData.phraseMarkers;
+    } else {
+      // Use simple progression for short pieces
+      progressionData = Progressions.generate(key, formDuration, seed, mode);
+      phraseMarkers = null;
+    }
+
     const progression = progressionData.progression;
     const rng = progressionData.rng;
 
@@ -52,9 +71,17 @@ class Planner {
       notes.push({ pitch: voicing.S, duration: noteDuration, startTime: startTime, voice: 0, velocity: 95 });
     });
 
+    // 3.5. Apply Voice Interdependence for more organic texture
+    const interdependenceSeed = rng().toString();
+    const withImitation = VoiceInterdependence.addImitation(notes, key, mode, interdependenceSeed);
+    const withCallResponse = VoiceInterdependence.addCallAndResponse(withImitation, key, interdependenceSeed);
+    const withContrary = VoiceInterdependence.enhanceContraryMotion(withCallResponse, key, interdependenceSeed);
+    const withArpeggiation = VoiceInterdependence.distributeArpeggiation(withContrary, progression, key, interdependenceSeed);
+    const withMotivic = VoiceInterdependence.addMotivicDevelopment(withArpeggiation, key, interdependenceSeed);
+
     // 4. Apply Melodic Ornamentation with configuration
     // Chain all ornament functions including trills, mordents, and turns for rapid figures
-    const suspendedNotes = Melodic.addSuspensions(notes, progression, key, ornamentConfig);
+    const suspendedNotes = Melodic.addSuspensions(withMotivic, progression, key, ornamentConfig);
     const withPassingTones = Melodic.addPassingTones(suspendedNotes, key, mode, ornamentConfig);
     const withNeighbors = Melodic.addNeighborTones(withPassingTones, key, ornamentConfig);
     const withAppog = Melodic.addAppoggiature(withNeighbors, progression, key, ornamentConfig);
@@ -79,7 +106,14 @@ class Planner {
 
     return {
       notes: humanizedNotes,
-      meta: { key, mode, form, style: `Baroque ${form}`, progression: numeralString }
+      meta: {
+        key,
+        mode,
+        form,
+        style: `Baroque ${form}`,
+        progression: numeralString,
+        phraseMarkers: phraseMarkers
+      }
     };
   }
 
