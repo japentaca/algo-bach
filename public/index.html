@@ -92,6 +92,59 @@
             font-family: monospace;
             word-break: break-all;
         }
+
+        .reverb-controls {
+            margin-top: 2rem;
+            padding: 1.5rem;
+            background: #f0f7ff;
+            border-radius: 8px;
+            border-left: 4px solid #3498db;
+        }
+
+        .reverb-controls h3 {
+            margin: 0 0 1rem 0;
+            font-size: 1rem;
+            color: #2c3e50;
+            font-weight: 600;
+        }
+
+        .reverb-controls label {
+            display: block;
+            text-align: left;
+            margin: 0.8rem 0;
+            font-size: 0.95rem;
+            color: #333;
+        }
+
+        .reverb-controls select {
+            width: 100%;
+            margin: 0.5rem 0 0 0;
+            box-sizing: border-box;
+        }
+
+        .reverb-mix-container {
+            margin-top: 1rem;
+        }
+
+        .reverb-mix-container label {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 0.5rem;
+        }
+
+        .reverb-mix-container input[type="range"] {
+            width: 100%;
+            margin-top: 0.5rem;
+            cursor: pointer;
+        }
+
+        .reverb-mix-value {
+            font-weight: 600;
+            color: #3498db;
+            min-width: 40px;
+            text-align: right;
+        }
     </style>
 </head>
 
@@ -140,6 +193,41 @@
                 <option value="5">Long (~5m)</option>
             </select>
             <button id="playBtn">Generate & Play</button>
+        </div>
+        <div class="reverb-controls">
+            <h3>🎵 Reverb Effect</h3>
+            <label>
+                Impulse Response:
+                <select id="impulseSelect">
+                    <option value="none">No Reverb</option>
+                    <option value="RoomMedium.mp3">Room - Medium</option>
+                    <option value="RoomLarge.mp3">Room - Large</option>
+                    <option value="RoomHuge.mp3">Room - Huge</option>
+                    <option value="RoomConcertHall.mp3" selected>Concert Hall</option>
+                    <option value="RoomPool.mp3">Pool / Bathroom</option>
+                    <option value="PlateSmall.mp3">Plate - Small</option>
+                    <option value="PlateMedium.mp3">Plate - Medium</option>
+                    <option value="PlateLarge.mp3">Plate - Large</option>
+                    <option value="PlateSuperDry.mp3">Plate - Super Dry</option>
+                    <option value="PrimeShort.mp3">Prime - Short</option>
+                    <option value="PrimeMed.mp3">Prime - Medium</option>
+                    <option value="PrimeLong.mp3">Prime - Long</option>
+                    <option value="PrimeXtraLong.mp3">Prime - Extra Long</option>
+                    <option value="AirportTerminal.mp3">Airport Terminal</option>
+                    <option value="CastleThunder.mp3">Castle Thunder</option>
+                    <option value="GiantCave.mp3">Giant Cave</option>
+                    <option value="Hangar.mp3">Hangar</option>
+                    <option value="OutdoorBlastoff.mp3">Outdoor - Blastoff</option>
+                    <option value="OutdoorStadium.mp3">Outdoor - Stadium</option>
+                </select>
+            </label>
+            <div class="reverb-mix-container">
+                <label>
+                    Reverb Mix (Wet/Dry):
+                    <span class="reverb-mix-value"><span id="reverbMixValue">25</span>%</span>
+                </label>
+                <input type="range" id="reverbMix" min="0" max="100" value="25" step="5">
+            </div>
         </div>
         <div class="seed-controls">
             <label>

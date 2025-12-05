@@ -12,8 +12,12 @@ document.addEventListener('DOMContentLoaded', () => {
   let samplers = [];
   let volumes = [];  // Volume nodes for dynamics control
   let limiter;
+  let convolver;  // Convolver node for reverb
+  let reverbGain;  // Gain node to control reverb mix
+  let dryGain;     // Gain node to control dry signal
   let currentSeed = null;
   let currentStyle = 'Strings';  // Default style
+  let currentImpulse = 'RoomConcertHall.mp3';  // Current impulse response file (default: Concert Hall)
 
   // Seed generation function
   function generateUniqueSeed() {
@@ -36,14 +40,88 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  // Handle impulse response selection
+  const impulseSelect = document.getElementById('impulseSelect');
+  if (impulseSelect) {
+    impulseSelect.addEventListener('change', async (e) => {
+      currentImpulse = e.target.value;
+      console.log(`Impulse changed to: ${currentImpulse}`);
+      
+      // If convolver is already initialized, load the new impulse
+      if (convolver) {
+        if (currentImpulse === 'none') {
+          // Disable reverb by setting wet gain to 0
+          if (reverbGain) reverbGain.gain.value = 0;
+          if (dryGain) dryGain.gain.value = 1;
+          console.log("✓ Reverb disabled");
+        } else {
+          try {
+            await convolver.load(`impulses/${currentImpulse}`);
+            console.log(`✓ Impulse response loaded: ${currentImpulse}`);
+            // Restore mix level when changing impulse
+            const reverbMixSlider = document.getElementById('reverbMix');
+            if (reverbMixSlider) {
+              updateReverbMix(parseInt(reverbMixSlider.value));
+            }
+          } catch (error) {
+            console.error(`Error loading impulse: ${error.message}`);
+          }
+        }
+      }
+    });
+  }
+
+  // Handle reverb mix slider
+  const reverbMixSlider = document.getElementById('reverbMix');
+  const reverbMixValue = document.getElementById('reverbMixValue');
+  if (reverbMixSlider) {
+    reverbMixSlider.addEventListener('input', (e) => {
+      const mixPercent = parseInt(e.target.value);
+      
+      if (reverbMixValue) {
+        reverbMixValue.innerText = mixPercent;
+      }
+      
+      // Update reverb mix only if reverb is not disabled
+      if (currentImpulse !== 'none') {
+        updateReverbMix(mixPercent);
+      }
+    });
+  }
+
   async function initAudio() {
     console.log("Initializing Audio...");
     await Tone.start();
     console.log("Audio Context Started");
 
     if (!limiter) {
+      // Create the main output limiter
       limiter = new Tone.Limiter(-1).toDestination();
+      
+      // Create dry/wet mix nodes
+      dryGain = new Tone.Gain(0.75).connect(limiter);  // Default 75% dry (25% wet)
+      reverbGain = new Tone.Gain(0.25).connect(limiter);  // Default 25% wet
+      
+      // Create the convolver (reverb) node
+      convolver = new Tone.Convolver({ url: null, normalize: true }).connect(reverbGain);
+      
+      console.log("✓ Convolver, Gains, and Limiter initialized");
     }
+  }
+
+  /**
+   * Update reverb mix based on slider value (0-100)
+   */
+  function updateReverbMix(mixPercent) {
+    if (!dryGain || !reverbGain) return;
+    
+    const wetValue = mixPercent / 100;
+    const dryValue = 1 - wetValue;
+    
+    reverbGain.gain.value = wetValue;
+    dryGain.gain.value = dryValue;
+    
+    console.log(`Reverb mix updated: ${mixPercent}% wet, ${Math.round((1-wetValue)*100)}% dry`);
   }
 
   /**
@@ -72,9 +150,16 @@ document.addEventListener('DOMContentLoaded', () => {
       // Load all samplers for this style
       const loadedSamplers = await loadStyleSamplers(styleName);
 
-      // Chain each sampler through a Volume node -> Panner -> Limiter
+      // Chain each sampler through a Volume node -> Panner -> split to (Dry + Convolver)
       for (let i = 0; i < 4; i++) {
-        const volume = new Tone.Volume(0).connect(new Tone.Panner(pans[i]).connect(limiter));
+        const volume = new Tone.Volume(0);
+        const panner = new Tone.Panner(pans[i]);
+        
+        // Connect to both dry and reverb paths
+        panner.connect(dryGain);
+        panner.connect(convolver);
+        
+        volume.connect(panner);
         loadedSamplers[i].connect(volume);
 
         samplers.push(loadedSamplers[i]);
