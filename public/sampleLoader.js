@@ -38,11 +38,58 @@ async function createSampler(instrumentName) {
 }
 
 /**
+ * Create a monophonic sampler wrapper using Tone.PolySynth with 1 voice
+ * This ensures only one note plays at a time, cutting off previous notes
+ * @param {string} instrumentName - Name of the instrument (must exist in INSTRUMENT_SAMPLES)
+ * @returns {Promise<Tone.PolySynth>} Promise that resolves when monophonic sampler is loaded
+ */
+async function createMonophonicSampler(instrumentName) {
+  if (!INSTRUMENT_SAMPLES[instrumentName]) {
+    throw new Error(`Instrument not found: ${instrumentName}`);
+  }
+
+  const config = INSTRUMENT_SAMPLES[instrumentName];
+
+  // Convert sample mapping to Tone.Sampler format
+  const sampleMap = {};
+  for (const [note, file] of Object.entries(config.samples)) {
+    sampleMap[note] = file;
+  }
+
+  return new Promise((resolve, reject) => {
+    try {
+      // Factory function that creates a new Tone.Sampler instance for each voice
+      function createSamplerVoice() {
+        return new Tone.Sampler(sampleMap, undefined, config.baseUrl);
+      }
+
+      // Wrap in PolySynth with 1 voice to enforce monophony
+      // This automatically cuts off previous notes when new ones start
+      const monoSampler = new Tone.PolySynth(1, createSamplerVoice);
+      
+      // Wait for samples to load by creating a temporary test sampler
+      const testSampler = new Tone.Sampler(
+        sampleMap,
+        function onSamplesLoaded() {
+          console.log(`✓ Monophonic sampler loaded for ${instrumentName}`);
+          testSampler.dispose();
+          resolve(monoSampler);
+        },
+        config.baseUrl
+      );
+    } catch (error) {
+      reject(new Error(`Failed to create monophonic sampler for ${instrumentName}: ${error.message}`));
+    }
+  });
+}
+
+/**
  * Load all samplers for a given style
  * @param {string} styleName - Style preset name
- * @returns {Promise<Array<Tone.Sampler>>} Array of 4 samplers (Soprano, Alto, Tenor, Bass)
+ * @param {Array<boolean>} monoModes - Optional array of 4 booleans indicating monophonic mode per voice
+ * @returns {Promise<Array<Tone.Sampler|Tone.PolySynth>>} Array of 4 samplers (Soprano, Alto, Tenor, Bass)
  */
-async function loadStyleSamplers(styleName) {
+async function loadStyleSamplers(styleName, monoModes = [false, false, false, false]) {
   if (!STYLE_PRESETS[styleName]) {
     throw new Error(`Style not found: ${styleName}`);
   }
@@ -52,10 +99,14 @@ async function loadStyleSamplers(styleName) {
 
   console.log(`Loading samplers for style: ${styleName}`);
   console.log(`Instruments: ${instrumentNames.join(', ')}`);
+  console.log(`Monophonic modes: ${monoModes.join(', ')}`);
 
   try {
-    // Load all 4 samplers in parallel
-    const samplerPromises = instrumentNames.map(name => createSampler(name));
+    // Load all 4 samplers in parallel with appropriate mode
+    const samplerPromises = instrumentNames.map((name, index) => {
+      const isMonophonic = monoModes[index] || false;
+      return isMonophonic ? createMonophonicSampler(name) : createSampler(name);
+    });
     const samplers = await Promise.all(samplerPromises);
 
     console.log(`✓ All samplers loaded for ${styleName}`);

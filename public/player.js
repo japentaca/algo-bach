@@ -20,6 +20,7 @@ document.addEventListener('DOMContentLoaded', () => {
   let samplers = [];
   let volumes = [];  // Volume nodes for dynamics control
   let panners = [];  // Panner nodes for stereo placement
+  let monoModes = [false, false, false, false];  // Monophonic mode state for each voice
   let limiter;
   let convolver;  // Convolver node for reverb
   let reverbGain;  // Gain node to control reverb mix
@@ -302,8 +303,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
   /**
    * Create samplers for the selected style with volume control nodes
+   * @param {string} styleName - The style to load
+   * @param {Array<boolean>} monoModes - Optional array indicating monophonic mode per voice
    */
-  async function setupSamplers(styleName) {
+  async function setupSamplers(styleName, monoModes = [false, false, false, false]) {
     // Dispose old samplers and audio nodes if they exist
     if (samplers.length > 0 || volumes.length > 0 || panners.length > 0) {
       console.log("Disposing old audio resources...");
@@ -321,8 +324,8 @@ document.addEventListener('DOMContentLoaded', () => {
     console.log(`Setting up samplers for style: ${styleName}`);
 
     try {
-      // Load all samplers for this style
-      const loadedSamplers = await loadStyleSamplers(styleName);
+      // Load all samplers for this style with monophonic modes
+      const loadedSamplers = await loadStyleSamplers(styleName, monoModes);
 
       // Chain each sampler through a Volume node -> Panner -> split to (Dry + Convolver)
       for (let i = 0; i < 4; i++) {
@@ -342,6 +345,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       console.log(`✓ Samplers setup complete for ${styleName}`);
+      console.log(`Monophonic modes: [${monoModes.join(', ')}]`);
       return true;
     } catch (error) {
       console.error(`Error loading samplers: ${error.message}`);
@@ -477,7 +481,7 @@ document.addEventListener('DOMContentLoaded', () => {
           // Set volume for this note
           volumes[voiceIndex].volume.value = volumeDb;
 
-          // Trigger the note
+          // Trigger the note - works for both Tone.Sampler and Tone.PolySynth
           samplers[voiceIndex].triggerAttackRelease(note.pitch, durationSecs, time, velocity);
         }
       });
