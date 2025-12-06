@@ -66,7 +66,7 @@ async function createMonophonicSampler(instrumentName) {
       // Wrap in PolySynth with 1 voice to enforce monophony
       // This automatically cuts off previous notes when new ones start
       const monoSampler = new Tone.PolySynth(1, createSamplerVoice);
-      
+
       // Wait for samples to load by creating a temporary test sampler
       const testSampler = new Tone.Sampler(
         sampleMap,
