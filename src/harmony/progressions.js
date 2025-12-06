@@ -49,8 +49,106 @@ const CADENCE_TYPES = {
 const TRANSITIONS = {
   TONIC: { TONIC: 0.3, SUBDOMINANT: 0.4, DOMINANT: 0.3 },
   SUBDOMINANT: { TONIC: 0.1, SUBDOMINANT: 0.2, DOMINANT: 0.7 }, // Strong pull to Dominant
-  DOMINANT: { TONIC: 0.8, SUBDOMINANT: 0.05, DOMINANT: 0.15 }   // Strong pull to Tonic (Resolution)
+  DOMINANT: { TONIC: 0.85, SUBDOMINANT: 0.02, DOMINANT: 0.13 }   // Stronger pull to Tonic, rarely retrogressive
 };
+
+// Chord weights within each function (primary chords weighted higher)
+// Higher weight = more likely to be selected
+const CHORD_WEIGHTS = {
+  major: {
+    TONIC: { 'I': 0.65, 'vi': 0.25, 'iii': 0.10 },
+    SUBDOMINANT: { 'IV': 0.55, 'ii': 0.45 },
+    DOMINANT: { 'V': 0.50, 'V7': 0.30, 'vii°': 0.12, 'vii°7': 0.08 }
+  },
+  minor: {
+    TONIC: { 'i': 0.65, 'VI': 0.25, 'III': 0.10 },
+    SUBDOMINANT: { 'iv': 0.55, 'ii°': 0.45 },
+    DOMINANT: { 'V': 0.50, 'V7': 0.30, 'vii°': 0.12, 'vii°7': 0.08 }
+  }
+};
+
+// Special weights when resolving from DOMINANT to TONIC (prefer I/i strongly)
+const RESOLUTION_WEIGHTS = {
+  major: { 'I': 0.80, 'vi': 0.15, 'iii': 0.05 },
+  minor: { 'i': 0.80, 'VI': 0.15, 'III': 0.05 }
+};
+
+// Root motion quality based on interval (semitones mod 12)
+// Lower score = better root motion
+const ROOT_MOTION_QUALITY = {
+  0: 0.3,   // Unison (same chord) - weak but ok
+  1: 0.7,   // Minor 2nd - weak
+  2: 0.6,   // Major 2nd - moderate
+  3: 0.4,   // Minor 3rd - good
+  4: 0.4,   // Major 3rd - good
+  5: 0.2,   // Perfect 4th - strong (circle of fifths)
+  6: 0.9,   // Tritone - avoid
+  7: 0.2,   // Perfect 5th - strong (circle of fifths)
+  8: 0.4,   // Minor 6th - good
+  9: 0.4,   // Major 6th - good
+  10: 0.6,  // Minor 7th - moderate
+  11: 0.7   // Major 7th - weak
+};
+
+/**
+ * Select a chord from candidates using weighted probability
+ * @param {object} weights - Object mapping chord numerals to weights
+ * @param {function} rng - Random number generator
+ * @returns {string} Selected chord numeral
+ */
+function selectWeightedChord(weights, rng) {
+  const entries = Object.entries(weights);
+  const totalWeight = entries.reduce((sum, [_, w]) => sum + w, 0);
+  const rand = rng() * totalWeight;
+
+  let cumulative = 0;
+  for (const [chord, weight] of entries) {
+    cumulative += weight;
+    if (rand < cumulative) {
+      return chord;
+    }
+  }
+  return entries[0][0]; // Fallback to first chord
+}
+
+/**
+ * Get the root pitch class from a Roman numeral
+ * @param {string} numeral - Roman numeral (e.g., 'I', 'vi', 'V7')
+ * @returns {number} Scale degree (0-6)
+ */
+function getRootDegree(numeral) {
+  const clean = numeral.replace(/[°7]/g, '').toUpperCase();
+  const degreeMap = { 'I': 0, 'II': 1, 'III': 2, 'IV': 3, 'V': 4, 'VI': 5, 'VII': 6 };
+  return degreeMap[clean] !== undefined ? degreeMap[clean] : 0;
+}
+
+/**
+ * Calculate root motion quality between two chords
+ * @param {string} prevNumeral - Previous chord numeral
+ * @param {string} nextNumeral - Next chord numeral
+ * @param {function} rng - Random number generator for probabilistic acceptance
+ * @returns {boolean} True if root motion is acceptable
+ */
+function hasGoodRootMotion(prevNumeral, nextNumeral, rng) {
+  // 20% of the time, allow any root motion for variety
+  if (rng() < 0.20) return true;
+
+  const prevDegree = getRootDegree(prevNumeral);
+  const nextDegree = getRootDegree(nextNumeral);
+
+  // Calculate interval in semitones (approximate using major scale intervals)
+  const degreeToSemitones = [0, 2, 4, 5, 7, 9, 11]; // Major scale
+  const prevSemi = degreeToSemitones[prevDegree];
+  const nextSemi = degreeToSemitones[nextDegree];
+  const interval = Math.abs(nextSemi - prevSemi) % 12;
+
+  const quality = ROOT_MOTION_QUALITY[interval];
+
+  // Probabilistic acceptance based on quality (lower = better = more likely)
+  // Quality 0.2 (good) -> 95% accept, Quality 0.9 (bad) -> 30% accept
+  const acceptProbability = 1.0 - (quality * 0.7);
+  return rng() < acceptProbability;
+}
 
 const Progressions = {
   /**
@@ -143,17 +241,27 @@ const Progressions = {
         }
       }
 
-      // 2. Pick a chord from that function
-      const candidates = chordFunctions[nextFunction];
-      let nextChordNumeral = candidates[Math.floor(rng() * candidates.length)];
+      // 2. Pick a chord from that function using weighted selection
+      let weights;
 
-      // 2b. Stochastic 7th chord addition (8-15% probability)
-      const seventhChance = rng();
-      if (seventhChance < 0.12 && (nextChordNumeral === 'V' || nextChordNumeral === 'v')) {
-        nextChordNumeral = 'V7';
-      } else if (seventhChance < 0.08 && nextChordNumeral === 'vii°') {
-        nextChordNumeral = 'vii°7';
+      // Use special resolution weights when dominant resolves to tonic
+      if (currentFunction === 'DOMINANT' && nextFunction === 'TONIC') {
+        weights = RESOLUTION_WEIGHTS[mode];
+      } else {
+        weights = CHORD_WEIGHTS[mode][nextFunction];
       }
+
+      // Try to find a chord with good root motion (with retries)
+      let nextChordNumeral;
+      let attempts = 0;
+      const maxAttempts = 3;
+
+      do {
+        nextChordNumeral = selectWeightedChord(weights, rng);
+        attempts++;
+      } while (attempts < maxAttempts && !hasGoodRootMotion(currentChord, nextChordNumeral, rng));
+
+      // Note: 7th chords are now included in the weights, no need for separate stochastic addition
 
       // 3. Determine Inversion (Probabilistic - weighted)
       // Root (50%), 1st Inv (35%), 2nd Inv (15%, rare)

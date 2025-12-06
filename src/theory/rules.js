@@ -64,6 +64,74 @@ const Rules = {
     if (dir1 !== dir2) return 'contrary';
     if (int1 === int2) return 'parallel';
     return 'similar';
+  },
+
+  /**
+   * Evaluates root motion quality between two chord numerals
+   * @param {string} fromNumeral - Source chord (e.g., 'V', 'ii')
+   * @param {string} toNumeral - Target chord (e.g., 'I', 'vi')
+   * @returns {object} Quality assessment { quality: 'strong'|'moderate'|'weak'|'avoid', score: 0-1 }
+   */
+  getRootMotionQuality: (fromNumeral, toNumeral) => {
+    const degreeMap = { 'I': 0, 'II': 1, 'III': 2, 'IV': 3, 'V': 4, 'VI': 5, 'VII': 6 };
+    const degreeToSemitones = [0, 2, 4, 5, 7, 9, 11];
+
+    const cleanFrom = fromNumeral.replace(/[°7]/g, '').toUpperCase();
+    const cleanTo = toNumeral.replace(/[°7]/g, '').toUpperCase();
+
+    const fromDegree = degreeMap[cleanFrom] !== undefined ? degreeMap[cleanFrom] : 0;
+    const toDegree = degreeMap[cleanTo] !== undefined ? degreeMap[cleanTo] : 0;
+
+    const interval = Math.abs(degreeToSemitones[toDegree] - degreeToSemitones[fromDegree]) % 12;
+
+    // Classify by interval
+    if (interval === 5 || interval === 7) {
+      return { quality: 'strong', score: 0.9 };  // 4ths and 5ths (circle of fifths)
+    } else if (interval === 3 || interval === 4 || interval === 8 || interval === 9) {
+      return { quality: 'moderate', score: 0.6 };  // 3rds and 6ths
+    } else if (interval === 6) {
+      return { quality: 'avoid', score: 0.1 };  // Tritone
+    } else if (interval === 0) {
+      return { quality: 'weak', score: 0.4 };  // Same chord
+    } else {
+      return { quality: 'weak', score: 0.3 };  // 2nds and 7ths
+    }
+  },
+
+  /**
+   * Checks if a chord transition is a strong harmonic resolution
+   * @param {string} fromNumeral - Source chord (e.g., 'V', 'V7')
+   * @param {string} toNumeral - Target chord (e.g., 'I', 'vi')
+   * @returns {boolean} True if this is a strong resolution
+   */
+  isStrongResolution: (fromNumeral, toNumeral) => {
+    const strongResolutions = [
+      ['V', 'I'], ['V', 'i'], ['V7', 'I'], ['V7', 'i'],
+      ['vii°', 'I'], ['vii°', 'i'], ['vii°7', 'I'], ['vii°7', 'i'],
+      ['IV', 'I'], ['iv', 'i'],  // Plagal
+      ['ii', 'V'], ['ii°', 'V'], ['IV', 'V'], ['iv', 'V']  // Pre-dominant to dominant
+    ];
+
+    const cleanFrom = fromNumeral.replace(/6\/4|6/g, '');
+    const cleanTo = toNumeral.replace(/6\/4|6/g, '');
+
+    return strongResolutions.some(([f, t]) => cleanFrom === f && cleanTo === t);
+  },
+
+  /**
+   * Checks if a progression contains retrogressive motion (going "backwards" in functional harmony)
+   * @param {string} fromFunction - Source function ('TONIC', 'SUBDOMINANT', 'DOMINANT')
+   * @param {string} toFunction - Target function
+   * @returns {boolean} True if this is retrogressive motion
+   */
+  isRetrogradeMotion: (fromFunction, toFunction) => {
+    // Retrograde: D->S or T->D without S in between (less common)
+    const retrogressions = [
+      ['DOMINANT', 'SUBDOMINANT'],  // V -> IV (retrogression)
+      ['TONIC', 'DOMINANT']         // I -> V without passing through SD (acceptable but less strong)
+    ];
+
+    return retrogressions.some(([f, t]) => fromFunction === f && toFunction === t);
   }
 };
 

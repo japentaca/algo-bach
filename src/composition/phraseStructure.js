@@ -8,6 +8,33 @@ const seedrandom = require('seedrandom');
 
 const PhraseStructure = {
   /**
+   * Check if a cross-phrase transition is awkward (tritone root motion or problematic)
+   * @param {string} fromNumeral - Last chord of previous phrase
+   * @param {string} toNumeral - First chord of next phrase
+   * @returns {boolean} True if transition is awkward
+   */
+  isAwkwardTransition: (fromNumeral, toNumeral) => {
+    const degreeMap = { 'I': 0, 'II': 1, 'III': 2, 'IV': 3, 'V': 4, 'VI': 5, 'VII': 6 };
+    const degreeToSemitones = [0, 2, 4, 5, 7, 9, 11];
+
+    const cleanFrom = (fromNumeral || 'I').replace(/[°7]/g, '').toUpperCase();
+    const cleanTo = (toNumeral || 'I').replace(/[°7]/g, '').toUpperCase();
+
+    const fromDegree = degreeMap[cleanFrom] !== undefined ? degreeMap[cleanFrom] : 0;
+    const toDegree = degreeMap[cleanTo] !== undefined ? degreeMap[cleanTo] : 0;
+
+    const interval = Math.abs(degreeToSemitones[toDegree] - degreeToSemitones[fromDegree]) % 12;
+
+    // Tritone (6 semitones) is awkward
+    if (interval === 6) return true;
+
+    // Same chord repeated across phrase boundary can sound static
+    if (interval === 0 && cleanFrom === cleanTo) return true;
+
+    return false;
+  },
+
+  /**
    * Generates a period (antecedent + consequent phrases)
    * @param {string} key - Tonic key
    * @param {string} mode - 'major' or 'minor'
@@ -24,8 +51,23 @@ const PhraseStructure = {
     const antecedentData = Progressions.generate(key, phraseLength, antecedentSeed, mode, 'HC');
 
     // Generate consequent phrase (ends with authentic cadence)
-    const consequentSeed = rng().toString();
-    const consequentData = Progressions.generate(key, phraseLength, consequentSeed, mode, parallel ? 'PAC' : 'IAC');
+    let consequentSeed = rng().toString();
+    let consequentData = Progressions.generate(key, phraseLength, consequentSeed, mode, parallel ? 'PAC' : 'IAC');
+
+    // 50% of the time, validate cross-phrase transition for smoothness
+    if (rng() < 0.5) {
+      const lastAntecedent = antecedentData.progression[antecedentData.progression.length - 1];
+      const firstConsequent = consequentData.progression[0];
+
+      // Check if transition is awkward (tritone root motion or same chord repeated)
+      const isAwkward = PhraseStructure.isAwkwardTransition(lastAntecedent.numeral, firstConsequent.numeral);
+
+      if (isAwkward) {
+        // Regenerate consequent with new seed
+        consequentSeed = rng().toString();
+        consequentData = Progressions.generate(key, phraseLength, consequentSeed, mode, parallel ? 'PAC' : 'IAC');
+      }
+    }
 
     // Combine progressions
     const fullProgression = [...antecedentData.progression, ...consequentData.progression];
