@@ -88,7 +88,7 @@ function fixFugueDissonances(notes, key, mode = 'major') {
   const harshIntervals = ['2m', '2M', '7m', '7M', '9m', '9M'];
   const consonantSemitones = [0, 3, 4, 5, 7, 8, 9, 12]; // unison, 3m, 3M, 4P, 5P, 6m, 6M, 8P
 
-  const scaleType = mode === 'minor' ? 'natural minor' : 'major';
+  const scaleType = mode === 'minor' ? 'harmonic minor' : 'major';
   const scaleData = Scale.get(`${key} ${scaleType}`);
   const scale = scaleData.notes && scaleData.notes.length > 0 ? scaleData.notes : ['C', 'D', 'E', 'F', 'G', 'A', 'B'];
 
@@ -305,8 +305,10 @@ const Melodic = {
    * @param {object} config - Ornament configuration (optional)
    */
   addSuspensions: (notes, progression, key, config = DEFAULT_ORNAMENT_CONFIG) => {
-    // We rebuild the notes array
-    let finalNotes = [];
+    // Start with all notes
+    let finalNotes = [...notes];
+    const notesToRemove = new Set();
+    const notesToAdd = [];
 
     // Group notes by chord index (startTime / 2)
     const notesByChord = {};
@@ -336,14 +338,12 @@ const Melodic = {
 
           // Skip if in cadence zone (final measures)
           if (isInCadenceZone(targetNote, config)) {
-            currentNotes.forEach(n => finalNotes.push(n));
             continue;
           }
 
           // Check probability based on voice and density
           const prob = getOrnamentProbability(targetNote.voice, config, 0.8);
           if (Math.random() > prob) {
-            currentNotes.forEach(n => finalNotes.push(n));
             continue;
           }
 
@@ -362,11 +362,11 @@ const Melodic = {
               // The suspension pitch is the pitch class of the Tonic (next chord root) in the same octave.
               const suspPitch = Note.pitchClass(suspensionPitchClass) + Note.octave(resolutionPitch);
 
-              // Mark original note as replaced
-              targetNote.isSuspensionTarget = true;
+              // Mark original note for removal
+              notesToRemove.add(targetNote);
 
               // Add the Suspension Note
-              finalNotes.push({
+              notesToAdd.push({
                 pitch: suspPitch,
                 duration: "4n",
                 startTime: targetNote.startTime,
@@ -375,7 +375,7 @@ const Melodic = {
               });
 
               // Add the Resolution Note (Delayed)
-              finalNotes.push({
+              notesToAdd.push({
                 pitch: resolutionPitch,
                 duration: "4n",
                 startTime: targetNote.startTime + 1,
@@ -386,14 +386,11 @@ const Melodic = {
           }
         }
       }
-
-      // Add all notes for this chord that weren't replaced
-      currentNotes.forEach(n => {
-        if (!n.isSuspensionTarget) {
-          finalNotes.push(n);
-        }
-      });
     }
+
+    // Filter out removed notes and add new ones
+    finalNotes = finalNotes.filter(n => !notesToRemove.has(n));
+    finalNotes.push(...notesToAdd);
 
     return finalNotes.sort((a, b) => a.startTime - b.startTime);
   },
@@ -436,7 +433,20 @@ const Melodic = {
       return Note.fromMidi(Math.round(midMidi));
     } else if (Math.abs(midi1 - midi2) === 3) {
       const lower = midi1 < midi2 ? midi1 : midi2;
-      return Note.fromMidi(lower + 2); // Major 2nd from bottom
+
+      // Check scale for correct passing tone
+      // Use natural minor for descending minor, otherwise major/harmonic
+      const scaleType = (mode === 'minor' && !isAscending) ? 'natural minor' : (mode === 'minor' ? 'harmonic minor' : 'major');
+      const scale = Scale.get(`${key} ${scaleType}`).notes;
+      const scalePCs = scale.map(n => Note.pitchClass(n));
+
+      const p1 = Note.fromMidi(lower + 1);
+      const p2 = Note.fromMidi(lower + 2);
+
+      if (scalePCs.includes(Note.pitchClass(p1))) return p1;
+      if (scalePCs.includes(Note.pitchClass(p2))) return p2;
+
+      return Note.fromMidi(lower + 2); // Default to whole step
     }
     return null;
   },
@@ -447,9 +457,16 @@ const Melodic = {
    * @param {string} key - Key of the piece
    * @param {object} config - Ornament configuration (optional)
    */
-  addNeighborTones: (notes, key, config = DEFAULT_ORNAMENT_CONFIG) => {
+  addNeighborTones: (notes, key, mode = 'major', config = DEFAULT_ORNAMENT_CONFIG) => {
+    // Handle optional config if mode is omitted
+    if (typeof mode === 'object') {
+      config = mode;
+      mode = 'major';
+    }
+
     const ornamentedNotes = [];
-    const scale = Scale.get(`${key} major`).notes;
+    const scaleType = mode === 'minor' ? 'harmonic minor' : 'major';
+    const scale = Scale.get(`${key} ${scaleType}`).notes;
     const scaleSet = new Set(scale);
 
     // Group by voice
@@ -524,8 +541,21 @@ const Melodic = {
    * @param {string} key - Key of the piece
    * @param {object} config - Ornament configuration (optional)
    */
-  addAppoggiature: (notes, progression, key, config = DEFAULT_ORNAMENT_CONFIG) => {
-    const ornamentedNotes = [];
+  addAppoggiature: (notes, progression, key, mode = 'major', config = DEFAULT_ORNAMENT_CONFIG) => {
+    // Handle optional config if mode is omitted
+    if (typeof mode === 'object') {
+      config = mode;
+      mode = 'major';
+    }
+
+    // Start with all notes
+    let finalNotes = [...notes];
+    const notesToRemove = new Set();
+    const notesToAdd = [];
+
+    const scaleType = mode === 'minor' ? 'harmonic minor' : 'major';
+    const scale = Scale.get(`${key} ${scaleType}`).notes;
+    const scalePitchClasses = scale.map(n => Note.pitchClass(n));
 
     // Group notes by chord index
     const notesByChord = {};
@@ -546,12 +576,45 @@ const Melodic = {
 
         if (Math.random() <= prob && currentNotes.length > 0) {
           const midi = Note.midi(sopranoNote.pitch);
-          // Appoggiatura approaches from a step away
-          const approachMidi = Math.random() > 0.5 ? midi + 2 : midi - 2;
-          const approachPitch = Note.fromMidi(approachMidi);
+          const currentPC = Note.pitchClass(sopranoNote.pitch);
+
+          // Find diatonic neighbor
+          let approachPitch;
+          const scaleIndex = scalePitchClasses.indexOf(currentPC);
+
+          if (scaleIndex !== -1) {
+            const direction = Math.random() > 0.5 ? 1 : -1;
+            let neighborIndex = (scaleIndex + direction + scale.length) % scale.length;
+            const neighborPC = scalePitchClasses[neighborIndex];
+
+            // Calculate octave - find closest candidate
+            const currentOctave = Note.octave(sopranoNote.pitch);
+            const candidates = [
+              `${neighborPC}${currentOctave}`,
+              `${neighborPC}${currentOctave - 1}`,
+              `${neighborPC}${currentOctave + 1}`
+            ];
+
+            const targetMidi = midi + (direction * 2); // Target area
+
+            const bestCandidate = candidates.reduce((prev, curr) => {
+              const prevDiff = Math.abs(Note.midi(prev) - targetMidi);
+              const currDiff = Math.abs(Note.midi(curr) - targetMidi);
+              return currDiff < prevDiff ? curr : prev;
+            });
+
+            approachPitch = bestCandidate;
+          } else {
+            // Fallback for chromatic notes
+            const approachMidi = Math.random() > 0.5 ? midi + 2 : midi - 2;
+            approachPitch = Note.fromMidi(approachMidi);
+          }
+
+          // Mark original note for removal
+          notesToRemove.add(sopranoNote);
 
           // Add the appoggiatura (non-harmonic tone, accented)
-          ornamentedNotes.push({
+          notesToAdd.push({
             pitch: approachPitch,
             duration: "4n",
             startTime: sopranoNote.startTime - 1,
@@ -559,27 +622,22 @@ const Melodic = {
             type: 'appoggiatura'
           });
 
-          // Modify original note to be resolution
-          ornamentedNotes.push({
+          // Add resolution (original note shortened)
+          notesToAdd.push({
             ...sopranoNote,
             duration: "4n",
             startTime: sopranoNote.startTime,
             type: 'resolution'
           });
-
-          // Add other voices
-          currentNotes.filter(n => n.voice !== 0).forEach(n => {
-            ornamentedNotes.push(n);
-          });
-        } else {
-          currentNotes.forEach(n => ornamentedNotes.push(n));
         }
-      } else {
-        currentNotes.forEach(n => ornamentedNotes.push(n));
       }
     }
 
-    return ornamentedNotes.sort((a, b) => a.startTime - b.startTime);
+    // Filter out removed notes and add new ones
+    finalNotes = finalNotes.filter(n => !notesToRemove.has(n));
+    finalNotes.push(...notesToAdd);
+
+    return finalNotes.sort((a, b) => a.startTime - b.startTime);
   },
 
   /**
@@ -647,7 +705,7 @@ const Melodic = {
    */
   addTrills: (notes, key, mode = 'major', config = DEFAULT_ORNAMENT_CONFIG) => {
     const ornamentedNotes = [];
-    const scaleType = mode === 'minor' ? 'natural minor' : 'major';
+    const scaleType = mode === 'minor' ? 'harmonic minor' : 'major';
     const scaleData = Scale.get(`${key} ${scaleType}`);
     const scale = scaleData.notes || ['C', 'D', 'E', 'F', 'G', 'A', 'B'];
 
@@ -758,7 +816,7 @@ const Melodic = {
    */
   addMordents: (notes, key, mode = 'major', config = DEFAULT_ORNAMENT_CONFIG) => {
     const ornamentedNotes = [];
-    const scaleType = mode === 'minor' ? 'natural minor' : 'major';
+    const scaleType = mode === 'minor' ? 'harmonic minor' : 'major';
     const scaleData = Scale.get(`${key} ${scaleType}`);
     const scale = scaleData.notes || ['C', 'D', 'E', 'F', 'G', 'A', 'B'];
 
@@ -873,7 +931,7 @@ const Melodic = {
    */
   addTurns: (notes, key, mode = 'major', config = DEFAULT_ORNAMENT_CONFIG) => {
     const ornamentedNotes = [];
-    const scaleType = mode === 'minor' ? 'natural minor' : 'major';
+    const scaleType = mode === 'minor' ? 'harmonic minor' : 'major';
     const scaleData = Scale.get(`${key} ${scaleType}`);
     const scale = scaleData.notes || ['C', 'D', 'E', 'F', 'G', 'A', 'B'];
 

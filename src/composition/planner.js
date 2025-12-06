@@ -83,8 +83,8 @@ class Planner {
     // Chain all ornament functions including trills, mordents, and turns for rapid figures
     const suspendedNotes = Melodic.addSuspensions(withMotivic, progression, key, ornamentConfig);
     const withPassingTones = Melodic.addPassingTones(suspendedNotes, key, mode, ornamentConfig);
-    const withNeighbors = Melodic.addNeighborTones(withPassingTones, key, ornamentConfig);
-    const withAppog = Melodic.addAppoggiature(withNeighbors, progression, key, ornamentConfig);
+    const withNeighbors = Melodic.addNeighborTones(withPassingTones, key, mode, ornamentConfig);
+    const withAppog = Melodic.addAppoggiature(withNeighbors, progression, key, mode, ornamentConfig);
     const with98 = Melodic.add98Suspension(withAppog, ornamentConfig);
     // Add rapid figures: trills, mordents, turns (use fractional beat times)
     const withTrills = Melodic.addTrills(with98, key, mode, ornamentConfig);
@@ -176,7 +176,7 @@ class Planner {
 
       // Apply ornamentation chain including trills and mordents for baroque fugue style
       const withPassingTones = Melodic.addPassingTones(ornamentedNotes, key, mode, updatedConfig);
-      const withNeighbors = Melodic.addNeighborTones(withPassingTones, key, updatedConfig);
+      const withNeighbors = Melodic.addNeighborTones(withPassingTones, key, mode, updatedConfig);
       const with98 = Melodic.add98Suspension(withNeighbors, updatedConfig);
       const withTrills = Melodic.addTrills(with98, key, mode, updatedConfig);
       const withMordents = Melodic.addMordents(withTrills, key, mode, updatedConfig);
