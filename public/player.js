@@ -464,13 +464,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Check if MIDI output is enabled
         if (isMidiEnabled()) {
-          // Send MIDI note on
-          noteOn(note.pitch, Math.round(velocity * 127), voiceIndex);
-
-          // Schedule note off
+          // Schedule MIDI on/off so notes respect their start times
+          const delayMs = Math.max(0, (time - Tone.now()) * 1000);
           setTimeout(() => {
-            noteOff(note.pitch, voiceIndex);
-          }, durationSecs * 1000);
+            noteOn(note.pitch, Math.round(velocity * 127), voiceIndex);
+            setTimeout(() => {
+              noteOff(note.pitch, voiceIndex);
+            }, durationSecs * 1000);
+          }, delayMs);
         } else {
           // Use Tone.js sampler
           // Set volume for this note
