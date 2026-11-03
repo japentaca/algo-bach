@@ -29,6 +29,29 @@ const VARIATION_STYLES = [
   { texture: 'arpeggio' },
   { soprano: [[0.75, 0.25, 0.75, 0.25], [0.5, 0.25, 0.25, 0.5, 0.5]], bass: 'drum' }
 ];
+// Name of each VARIATION_STYLES texture (meta.sections, used by the player's articulation plan)
+const VARIATION_TEXTURES = ['chorale', 'eighths', 'sixteenths', 'long', 'arpeggio', 'dotted'];
+
+/**
+ * Concerto layout over the phrase plan: the opening and closing phrases are tutti
+ * ritornelli; in between, solo episodes of two phrases alternate with a one-phrase
+ * tutti return (S S T S S T ...). Metadata only: it does not change the notes.
+ */
+function ritornelloSections(phrases) {
+  const n = phrases.length;
+  const openTutti = n >= 8 ? 2 : 1;
+  return phrases.map((p, i) => {
+    let kind;
+    if (i < openTutti || i === n - 1 || n < 3) kind = 'tutti';
+    else kind = (i - openTutti) % 3 === 2 ? 'tutti' : 'solo';
+    return { kind, index: i, startBeat: p.startBeat, endBeat: p.endBeat, key: p.key, mode: p.mode };
+  }).reduce((acc, s) => {
+    const last = acc[acc.length - 1];
+    if (last && last.kind === s.kind) last.endBeat = s.endBeat;
+    else acc.push({ ...s, index: acc.length });
+    return acc;
+  }, []);
+}
 
 class Planner {
   generate(options = {}) {
@@ -68,7 +91,8 @@ class Planner {
         style: `Baroque ${form}`,
         bars: plan.chords.reduce((s, c) => s + c.beats, 0) / 4,
         progression: PhrasePlan.describe(plan.chords),
-        phraseMarkers: plan.phrases
+        phraseMarkers: plan.phrases,
+        ...(formKey === 'ritornello' ? { sections: ritornelloSections(plan.phrases) } : {})
       }
     };
   }
@@ -85,8 +109,14 @@ class Planner {
 
     const allNotes = [];
     const allChords = [];
+    const sections = [];
     for (let v = 0; v < nVar; v++) {
       const offset = v * themeBeats;
+      sections.push({
+        kind: v === 0 ? 'theme' : 'variation', index: v,
+        startBeat: offset, endBeat: offset + themeBeats,
+        texture: VARIATION_TEXTURES[v % VARIATION_TEXTURES.length]
+      });
       const chords = theme.chords.map(c => ({ ...c, start: c.start + offset, phrase: c.phrase + v * 10 }));
       const voicings = voiceChords(chords, { rng, jitter: 3 });
       const style = VARIATION_STYLES[v % VARIATION_STYLES.length];
@@ -106,7 +136,8 @@ class Planner {
         style: `Baroque ${form}`,
         bars: (themeBeats * nVar) / 4,
         progression: `Theme (${PhrasePlan.describe(theme.chords)}) + ${nVar - 1} variations`,
-        phraseMarkers: theme.phrases
+        phraseMarkers: theme.phrases,
+        sections
       }
     };
   }

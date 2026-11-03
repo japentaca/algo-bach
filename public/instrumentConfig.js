@@ -426,7 +426,144 @@ const STYLE_PRESETS = {
   'Harp': {
     displayName: 'Harp (Solo)',
     instruments: ['Harp', 'Harp', 'Harp', 'Harp']
-  }
+  },
+
+  // ---- Velocity-layered styles (VSCO 2 CE samples served from carrilion) ----
+  // `vsco` lists [S, A, T, B]: the catalog instrument / articulation of the voice's
+  // sustained sound, plus `arts`, the other articulations it can play (see
+  // articulation.js): vibrato, staccato (spiccato for strings), pizzicato, tremolo,
+  // and `solo` (a solo instrument's articulations, for the concertino of a
+  // ritornello). Each carries a trimDb relative to the style's, from the peak
+  // short-term RMS (100 ms) of the samples at velocity 90 against the voice's sustain:
+  // fully compensated for sustained articulations, 75% for the short ones (a short
+  // note at the same peak sounds softer), then checked in playback (section RMS of
+  // the same piece, auto against all-legato; the string spiccato needed 3 dB more:
+  // its overlapping natural tails add up in fast runs). A missing
+  // articulation falls back (pizzicato -> staccato -> shortened sustain, vibrato ->
+  // sustain...). The layer of each note is chosen by its velocity (layeredSampler.js).
+  // The "Key Switch" entries of the catalog mix several articulations: not used.
+  'VscoPiano': {
+    displayName: 'VSCO Upright Piano (5 velocity layers)',
+    engine: 'vsco',
+    keyboard: true,
+    release: 0.45,
+    trimDb: 6,  // level-matched to the Grand Piano style (measured RMS)
+    vsco: Array(4).fill({ instrument: 'VSUpright1', articulation: 'Default' }),
+  },
+  'VscoWoodwinds': {
+    displayName: 'VSCO Woodwinds (2-3 velocity layers)',
+    engine: 'vsco',
+    release: 0.25,
+    trimDb: 11,  // level-matched to the Woodwinds style (measured RMS)
+    vsco: [
+      {
+        instrument: 'FluteSus', articulation: 'Sustain',
+        arts: {
+          vibrato: { instrument: 'FluteSus', articulation: 'Sustain Vibrato', trimDb: -6 },
+          staccato: { instrument: 'Flute', articulation: 'Staccato', trimDb: -6.5 },
+        },
+      },
+      {
+        instrument: 'OboeSus', articulation: 'Sustain',
+        arts: {
+          vibrato: { instrument: 'OboeSus', articulation: 'Sustain Vibrato', trimDb: -3 },
+          staccato: { instrument: 'Oboe', articulation: 'Staccato', trimDb: -5.5 },
+        },
+      },
+      {
+        instrument: 'Clarinet', articulation: 'Sustain',
+        arts: { staccato: { instrument: 'Clarinet', articulation: 'Staccato', trimDb: -3.5 } },
+      },
+      {
+        instrument: 'Bassoon', articulation: 'Sustain',
+        arts: {
+          vibrato: { instrument: 'Bassoon', articulation: 'Vibrato', trimDb: -1.5 },
+          staccato: { instrument: 'Bassoon', articulation: 'Staccato', trimDb: -3 },
+        },
+      },
+    ],
+  },
+  'VscoBrass': {
+    displayName: 'VSCO Brass (2-4 velocity layers)',
+    engine: 'vsco',
+    release: 0.3,
+    trimDb: 9,  // level-matched to the Brass style (measured RMS)
+    vsco: [
+      {
+        instrument: 'Trumpet', articulation: 'Sustain',
+        arts: {
+          vibrato: { instrument: 'TrumpetSus', articulation: 'Sustain Vibrato', trimDb: 1 },
+          staccato: { instrument: 'Trumpet', articulation: 'Staccato', trimDb: -3 },
+        },
+      },
+      {
+        instrument: 'French Horn', articulation: 'Sustain',
+        arts: { staccato: { instrument: 'French Horn', articulation: 'Staccato', trimDb: -3.5 } },
+      },
+      {
+        instrument: 'Trombone', articulation: 'Sustain',
+        arts: {
+          vibrato: { instrument: 'Trombone', articulation: 'Vibrato', trimDb: -2.5 },
+          staccato: { instrument: 'Trombone', articulation: 'Staccato', trimDb: -4 },
+        },
+      },
+      {
+        instrument: 'Trombone', articulation: 'Sustain',
+        arts: {
+          vibrato: { instrument: 'Trombone', articulation: 'Vibrato', trimDb: -2.5 },
+          staccato: { instrument: 'Trombone', articulation: 'Staccato', trimDb: -4 },
+        },
+      },
+    ],
+  },
+  // String quartet (violins I & II, viola, cello) from the VSCO sections. The
+  // section sustains are recorded with vibrato (no plain sustain in VSCO), so
+  // "vibrato" is the same sound. The first violin has the solo violin as concertino.
+  'VscoStrings': {
+    displayName: 'VSCO Strings (Quartet, articulations)',
+    engine: 'vsco',
+    release: 0.35,
+    trimDb: 9.5,  // level-matched to the Strings style (measured RMS, legato)
+    vsco: [
+      {
+        instrument: 'ViolinEnsSus', articulation: 'Sustain Vibrato',
+        arts: {
+          staccato: { instrument: 'Violin', articulation: 'Spiccato', trimDb: -4 },
+          pizzicato: { instrument: 'Violin', articulation: 'Pizzicato', trimDb: -3 },
+          tremolo: { instrument: 'Violin', articulation: 'Tremolo', trimDb: -1 },
+          solo: {
+            sustain: { instrument: 'SViolin', articulation: 'Vibrato', trimDb: -4 },
+            staccato: { instrument: 'SViolin', articulation: 'Spiccato', trimDb: -5 },
+            pizzicato: { instrument: 'SViolin', articulation: 'Pizzicato', trimDb: -6 },
+          },
+        },
+      },
+      {
+        instrument: 'ViolinEnsSus', articulation: 'Sustain Vibrato',
+        arts: {
+          staccato: { instrument: 'Violin', articulation: 'Spiccato', trimDb: -4 },
+          pizzicato: { instrument: 'Violin', articulation: 'Pizzicato', trimDb: -3 },
+          tremolo: { instrument: 'Violin', articulation: 'Tremolo', trimDb: -1 },
+        },
+      },
+      {
+        instrument: 'ViolaEnsSus', articulation: 'Sustain Vibrato',
+        arts: {
+          staccato: { instrument: 'Viola', articulation: 'Spiccato', trimDb: -7 },
+          pizzicato: { instrument: 'Viola', articulation: 'Pizzicato', trimDb: -3.5 },
+          tremolo: { instrument: 'Viola', articulation: 'Tremolo', trimDb: -3 },
+        },
+      },
+      {
+        instrument: 'CelloEnsSus', articulation: 'Sustain Vibrato',
+        arts: {
+          staccato: { instrument: 'Cello', articulation: 'Spiccato', trimDb: -5 },
+          pizzicato: { instrument: 'Cello', articulation: 'Pizzicato', trimDb: -0.5 },
+          tremolo: { instrument: 'Cello', articulation: 'Tremolo', trimDb: -1 },
+        },
+      },
+    ],
+  },
 };
 
 // Export for use in player.js

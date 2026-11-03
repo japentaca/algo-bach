@@ -14,6 +14,7 @@
 document.addEventListener('DOMContentLoaded', () => {
   // ---- Tunables ----------------------------------------------------------
   const PAUSE_BETWEEN_PIECES_MS = 4000;  // silence after a piece's reverb tail
+  const SECTION_LEAD_SECS = 0.5;         // the first note sounds this long after playback starts
   const GENERATE_TIMEOUT_MS = 90000;     // generation + sample loading must finish within this
   const RETRY_BASE_MS = 5000;            // first retry delay after an error
   const RETRY_MAX_MS = 60000;            // back-off ceiling
@@ -25,7 +26,13 @@ document.addEventListener('DOMContentLoaded', () => {
     Variations: [72, 116],
     Suite: [76, 126],
   };
-  const TEMPO_SHIFT_BY_STYLE = { Choir: -8, Brass: -6, Harp: -4, Piano: 4 };
+  const TEMPO_SHIFT_BY_STYLE = { Choir: -8, Brass: -6, Harp: -4, Piano: 4, VscoBrass: -6, VscoPiano: 4 };
+  // Articulation profile (the "Articulation" selector): mostly the Baroque-practice
+  // plan, sometimes one manner for the whole piece. Pizzicato only where the ensemble
+  // really plucks (VSCO strings).
+  const ARTICULATION_WEIGHTS = { auto: 0.6, legato: 0.14, detached: 0.14, pizzicato: 0.12 };
+  const PIZZICATO_STYLES = ['VscoStrings'];
+  const ARTICULATION_IT = { auto: 'Articolazione naturale', legato: 'Tutto legato', detached: 'Tutto staccato', pizzicato: 'Tutto pizzicato' };
   // Reverb: always on in kiosk mode. Rooms suited to Baroque music (churches, halls),
   // each with a wet-mix range (%) set by its length: long tails get a little less mix.
   // The player crossfades dry = 1 - mix, wet = mix; ~35% puts the hall clearly audible
@@ -40,7 +47,7 @@ document.addEventListener('DOMContentLoaded', () => {
     'PrimeLong.mp3': [30, 44],
     'PrimeXtraLong.mp3': [26, 38],
   };
-  const REVERB_SHIFT_BY_STYLE = { Choir: 6, Strings: 3, Brass: 2, Harp: -3, Piano: -6 };
+  const REVERB_SHIFT_BY_STYLE = { Choir: 6, Strings: 3, Brass: 2, Harp: -3, Piano: -6, VscoBrass: 2, VscoPiano: -6, VscoStrings: 3 };
 
   // Stereo seatings [S, A, T, B] scaled by a random width. Ensembles: the modern stage
   // (high voices left, low voices right) or the antiphonal Baroque seating (the two
@@ -51,7 +58,7 @@ document.addEventListener('DOMContentLoaded', () => {
     antifonale: { label: 'Disposizione antifonale', pans: [-1, 1, -0.35, 0.35], weight: 0.35 },
   };
   const KEYBOARD_SEATING = { label: 'Dalla tastiera', pans: [1, 0.35, -0.35, -1] };
-  const KEYBOARD_STYLES = ['Piano', 'Harp'];
+  const KEYBOARD_STYLES = ['Piano', 'Harp', 'VscoPiano'];
 
   // ---- Italianate labels -------------------------------------------------
   const FORM_IT = {
@@ -66,6 +73,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const STYLE_IT = {
     Strings: "Quartetto d'archi", Piano: 'Pianoforte', Woodwinds: 'Quartetto di legni',
     Brass: 'Quartetto di ottoni', Choir: 'Coro', Harp: 'Arpa', Mixed: 'Orchestra',
+    VscoPiano: 'Pianoforte verticale (VSCO)', VscoWoodwinds: 'Quartetto di legni (VSCO)',
+    VscoBrass: 'Quartetto di ottoni (VSCO)', VscoStrings: "Quartetto d'archi (VSCO)",
   };
   const AFFETTO_IT = { style: 'Affetto naturale', delicate: 'Dolce', lyrical: 'Cantabile', bold: 'Con fuoco' };
 
@@ -89,6 +98,7 @@ document.addEventListener('DOMContentLoaded', () => {
     count: $('kioskCount'),
     title: $('kioskTitle'),
     subtitle: $('kioskSubtitle'),
+    section: $('kioskSection'),
     details: $('kioskDetails'),
     seed: $('kioskSeed'),
     state: $('kioskState'),
@@ -115,6 +125,8 @@ document.addEventListener('DOMContentLoaded', () => {
   let progressTimer = null;
   let wakeSleep = null;       // resolver that cuts a pending sleep short on exit
   let savedSeedUi = null;
+  let sectionTimeline = null;  // [{atSecs, endSecs, text}] of the piece playing
+  let shownSection = null;
 
   // ---- Helpers -----------------------------------------------------------
   const rand = (min, max) => min + Math.random() * (max - min);
@@ -162,6 +174,16 @@ document.addEventListener('DOMContentLoaded', () => {
     const el = $(id);
     const opt = el && el.options[el.selectedIndex];
     return opt ? opt.textContent.trim() : '';
+  }
+
+  function pickWeighted(values, weights) {
+    if (!values.length) return null;
+    let r = Math.random() * values.reduce((s, v) => s + (weights[v] || 0), 0);
+    for (const v of values) {
+      r -= weights[v] || 0;
+      if (r <= 0) return v;
+    }
+    return values[values.length - 1];
   }
 
   /** Prefer earlier (shorter) options: weight 1/(i+1)^1.3 → ~61% / 25% / 15% for three. */
@@ -228,6 +250,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     c.ornamentDensity = setRange('ornamentDensity', rand(20, 80));
 
+    const artOptions = optionValues('articulationSelect')
+      .filter(v => v in ARTICULATION_WEIGHTS && (v !== 'pizzicato' || PIZZICATO_STYLES.includes(c.style)));
+    c.articulation = pickWeighted(artOptions, ARTICULATION_WEIGHTS) || 'auto';
+    setSelect('articulationSelect', c.articulation);
+
     const [lo, hi] = TEMPO_BY_FORM[c.form] || [72, 120];
     const shift = TEMPO_SHIFT_BY_STYLE[c.style] || 0;
     c.tempo = setRange('tempoSlider', rand(lo, hi) + shift);
@@ -293,6 +320,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const impulse = optionText('impulseSelect');
     const details = [
       AFFETTO_IT[c.expressivity] || optionText('expressivityPreset'),
+      ARTICULATION_IT[c.articulation] || optionText('articulationSelect'),
       `Ornamenti ${c.ornamentDensity}%`,
       `${impulse} · ${c.reverbMix}% riverbero`,
       c.seating,
@@ -324,9 +352,38 @@ document.addEventListener('DOMContentLoaded', () => {
       ui.fill.style.width = pct.toFixed(2) + '%';
       ui.bar.setAttribute('aria-valuenow', String(Math.round(pct)));
       ui.elapsed.textContent = fmt(Math.min(elapsed, totalSecs));
+      updateSection(elapsed);
     };
     tick();
     progressTimer = setInterval(tick, 500);
+  }
+
+  /** Show the section playing at `elapsed` s ("Variazione III · pizzicato"), with a short fade. */
+  function updateSection(elapsed) {
+    if (!ui.section) return;
+    const t = elapsed - SECTION_LEAD_SECS;
+    const sec = sectionTimeline && (sectionTimeline.filter(s => t >= s.atSecs - 0.05).pop() || sectionTimeline[0]);
+    const text = sec ? sec.text : '';
+    if (text === shownSection) return;
+    shownSection = text;
+    ui.section.hidden = !text;
+    ui.section.classList.add('is-changing');
+    setTimeout(() => {
+      if (shownSection !== text) return;
+      ui.section.textContent = text;
+      ui.section.classList.remove('is-changing');
+    }, shownSection && ui.section.textContent ? 400 : 0);
+  }
+
+  function setSections(articulation) {
+    sectionTimeline = articulation && articulation.sections && articulation.sections.length
+      ? articulation.sections.map(s => ({ atSecs: s.atSecs, endSecs: s.endSecs, text: s.text }))
+      : null;
+    shownSection = null;
+    if (ui.section) {
+      ui.section.textContent = '';
+      ui.section.hidden = true;
+    }
   }
 
   function stopProgress() {
@@ -350,6 +407,7 @@ document.addEventListener('DOMContentLoaded', () => {
         choices = randomizeAll();
         resetProgress();
         showCard(choices, null);
+        setSections(null);
         setState('Componendo… (composing)');
 
         const result = await withTimeout(player.generateAndPlay(), GENERATE_TIMEOUT_MS);
@@ -361,6 +419,7 @@ document.addEventListener('DOMContentLoaded', () => {
         failures = 0;
         pieceNo++;
         showCard(choices, result.data);
+        setSections(result.articulation);
         setState(player.isMidiEnabled() ? 'In esecuzione · MIDI' : 'In esecuzione');
         startProgress(result.durationSecs);
 
@@ -482,6 +541,7 @@ document.addEventListener('DOMContentLoaded', () => {
     runId++;
     if (wakeSleep) wakeSleep();
     stopProgress();
+    setSections(null);
     try { player.stopPlayback(); } catch (e) { console.warn('Kiosk: stop failed', e); }
     if (player.setStereoLayout) player.setStereoLayout(null);  // back to the style's default seating
     restoreSeedUi();

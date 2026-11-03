@@ -854,6 +854,19 @@
             max-width: 18rem;
         }
 
+        .kiosk-section {
+            margin: 0.45rem 0 0;
+            font-family: var(--font-period);
+            font-style: italic;
+            font-size: clamp(1rem, 2.8vw, 1.2rem);
+            color: var(--accent);
+            transition: opacity 0.6s ease;
+        }
+
+        .kiosk-section.is-changing {
+            opacity: 0;
+        }
+
         .kiosk-details {
             margin: 0 auto;
             max-width: 36rem;
@@ -1172,6 +1185,21 @@
                         <option value="Choir">Choir (Chorus)</option>
                         <option value="Harp">Harp (Solo)</option>
                         <option value="Mixed">Mixed Orchestra</option>
+                        <optgroup label="Velocity layers (VSCO)">
+                            <option value="VscoPiano" disabled>VSCO Upright Piano</option>
+                            <option value="VscoWoodwinds" disabled>VSCO Woodwinds</option>
+                            <option value="VscoBrass" disabled>VSCO Brass</option>
+                            <option value="VscoStrings" disabled>VSCO Strings (Quartet)</option>
+                        </optgroup>
+                    </select>
+                </label>
+                <label class="field" title="How each note is played. Auto follows Baroque practice and gives each section (variation, fugal episode, solo / tutti) its own character. Real articulation samples need a VSCO ensemble; other ensembles only shorten the detached notes.">
+                    <span class="field-label">Articulation</span>
+                    <select id="articulationSelect">
+                        <option value="auto">Auto (Baroque practice)</option>
+                        <option value="legato">Legato</option>
+                        <option value="detached">Detached</option>
+                        <option value="pizzicato">Pizzicato</option>
                     </select>
                 </label>
                 <label class="field">
@@ -1199,6 +1227,7 @@
             <p class="kiosk-kicker">Concerto perpetuo · <span id="kioskCount">No. 1</span></p>
             <h2 id="kioskTitle" class="kiosk-title" aria-live="polite">—</h2>
             <p id="kioskSubtitle" class="kiosk-subtitle"></p>
+            <p id="kioskSection" class="kiosk-section" aria-live="polite" hidden></p>
             <div class="fleuron kiosk-fleuron" aria-hidden="true">❦</div>
             <p id="kioskDetails" class="kiosk-details"></p>
             <div id="kioskProgress" class="kiosk-progress" role="progressbar" aria-label="Piece progress"
@@ -1457,6 +1486,8 @@
     </div>
     <script src="instrumentConfig.js"></script>
     <script src="sampleLoader.js"></script>
+    <script src="layeredSampler.js"></script>
+    <script src="articulation.js"></script>
     <script src="midi.js"></script>
     <script src="player.js"></script>
     <script src="kiosk.js"></script>

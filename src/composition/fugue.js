@@ -373,6 +373,9 @@ function generate({ key, mode, bars, rng, density }) {
   const slots = [];          // {start, beats, key, mode, block, voices: ['fixed'|'free'|'rest' x4]}
   let t = 0;
   let block = 0;
+  // Formal sections (meta.sections): exposition, episode, entry, stretto, final, cadence
+  const sections = [];
+  const mark = (kind, startBeat, extra = {}) => sections.push({ kind, index: sections.length, startBeat, endBeat: t, ...extra });
 
   const addSlots = (beats, keyCtx, voiceStates, extra = {}) => {
     for (let b = 0; b < beats; b += 2) {
@@ -389,6 +392,7 @@ function generate({ key, mode, bars, rng, density }) {
   const orders = [[1, 0, 2, 3], [0, 1, 2, 3], [2, 1, 0, 3], [1, 2, 0, 3], [0, 2, 1, 3]];
   const order = pick(orders, rng);
   let lastTheme = null;
+  const expoStart = t;
   order.forEach((voice, i) => {
     const isAnswer = i % 2 === 1;
     const k = isAnswer ? domKey : home;
@@ -407,6 +411,7 @@ function generate({ key, mode, bars, rng, density }) {
     t += L;
     block++;
   });
+  mark('exposition', expoStart, { voices: order });
 
   // ---- Middle groups: episode + entry in a related key
   const related = PhrasePlan.relatedKeys(key, mode).map(r => ({ key: r.tonic, mode: r.mode }));
@@ -416,6 +421,7 @@ function generate({ key, mode, bars, rng, density }) {
   let lastEntryVoice = order[3];
 
   const episode = (fromKey, toKey) => {
+    const episodeStart = t;
     // Sequence on the subject head, descending by step, plus a free bar to the new dominant
     const head = subject.filter(n => n.start < 2);
     const voicesAvail = [0, 1, 2, 3].filter(v => v !== lastEntryVoice);
@@ -478,6 +484,7 @@ function generate({ key, mode, bars, rng, density }) {
     addSlots(2, toKey, ['free', 'free', 'free', 'free'], { prefer: 'D' });
     t += 2;
     block++;
+    mark('episode', episodeStart, { key: fromKey.key, mode: fromKey.mode });
   };
 
   for (let g = 0; g < groups; g++) {
@@ -485,6 +492,7 @@ function generate({ key, mode, bars, rng, density }) {
     episode(prevKey, k);
     const candidates = [0, 1, 2, 3].filter(v => v !== lastEntryVoice);
     const voice = pick(candidates, rng);
+    const entryStart = t;
     const theme = addLine(realize(subject, k.key, k.mode), voice, 'subject', t);
     const csVoice = voice === 0 ? 1 : voice === 3 ? 2 : (rng() < 0.5 ? voice - 1 : voice + 1);
     addLine(realize(csDeg, k.key, k.mode), csVoice, 'countersubject', t, { line: theme, above: csVoice < voice });
@@ -495,6 +503,7 @@ function generate({ key, mode, bars, rng, density }) {
     slots[slots.length - L / 2].prefer = 'T';
     t += L;
     block++;
+    mark('entry', entryStart, { key: k.key, mode: k.mode, voice });
     lastEntryVoice = voice;
     prevKey = k;
   }
@@ -515,15 +524,20 @@ function generate({ key, mode, bars, rng, density }) {
       if (tt + 2 > stretto.delay) states[v2] = 'fixed';
       slots.push({ start: t + b, beats: 2, key, mode, block, voices: states });
     }
+    const strettoStart = t;
     t += total;
     block++;
+    mark('stretto', strettoStart, { voices: [v1, v2] });
   }
 
   // ---- Final entry in the bass + cadence
+  const finalStart = t;
   addLine(realize(subject, key, mode), 3, 'subject', t);
   addSlots(L, home, ['free', 'free', 'free', 'fixed']);
   t += L;
   block++;
+  mark('final', finalStart, { voice: 3 });
+  const cadenceStart = t;
   const tonicN = mode === 'minor' ? 'i' : 'I';
   const cad = [
     { chord: PhrasePlan.makeChord(mode === 'minor' ? 'iv' : 'IV', 0, key, mode), f: 'S', beats: 2, role: 'predominant' },
@@ -535,6 +549,7 @@ function generate({ key, mode, bars, rng, density }) {
     slots.push({ start: t, beats: c.beats, key, mode, block, voices: ['free', 'free', 'free', 'free'], forced: c.chord, forcedF: c.f, role: c.role, cadence: c.cadence });
     t += c.beats;
   });
+  mark('cadence', cadenceStart);
 
   // ---- Harmonize & voice
   const chords = harmonize(slots, fixed, rng);
@@ -634,7 +649,8 @@ function generate({ key, mode, bars, rng, density }) {
         if (last && last.key === s.key && last.mode === s.mode) last.endBeat = s.start + s.beats;
         else acc.push({ index: acc.length, key: s.key, mode: s.mode, startBeat: s.start, endBeat: s.start + s.beats });
         return acc;
-      }, [])
+      }, []),
+      sections
     }
   };
 }

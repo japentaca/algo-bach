@@ -8,6 +8,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const expressivityPresetSelect = document.getElementById('expressivityPreset');
   const randomTextureCheck = document.getElementById('randomTextureCheck');
   const sparseOrnamentsCheck = document.getElementById('sparseOrnamentsCheck');
+  const articulationSelect = document.getElementById('articulationSelect');
+  let lastArticulationPlan = null;
 
   // MIDI elements
   const midiEnabledCheck = document.getElementById('midiEnabledCheck');
@@ -48,7 +50,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function currentPans(styleName) {
     if (panOverride) return panOverride;
-    return KEYBOARD_STYLES.includes(styleName) ? KEYBOARD_PANS : ENSEMBLE_PANS;
+    const keyboard = KEYBOARD_STYLES.includes(styleName)
+      || !!(STYLE_PRESETS[styleName] && STYLE_PRESETS[styleName].keyboard);
+    return keyboard ? KEYBOARD_PANS : ENSEMBLE_PANS;
   }
 
   /**
@@ -150,6 +154,20 @@ document.addEventListener('DOMContentLoaded', () => {
       currentStyle = e.target.value;
       console.log(`Style changed to: ${currentStyle}`);
     });
+
+    // Velocity-layered (VSCO) styles stay disabled unless the server can serve the samples
+    if (typeof isVscoAvailable === 'function') {
+      isVscoAvailable().then(available => {
+        Array.from(styleSelect.options).forEach(opt => {
+          const preset = STYLE_PRESETS[opt.value];
+          if (preset && preset.engine === 'vsco') {
+            opt.disabled = !available;
+            opt.title = available ? '' : 'VSCO samples not found (set SOUNDFONTS_DIR on the server)';
+          }
+        });
+        console.log(`VSCO velocity-layered styles ${available ? 'enabled' : 'unavailable'}`);
+      });
+    }
   }
 
   // Initialize MIDI on page load
@@ -383,7 +401,7 @@ document.addEventListener('DOMContentLoaded', () => {
    * @param {string} styleName - The style to load
    * @param {Array<boolean>} monoModes - Optional array indicating monophonic mode per voice
    */
-  async function setupSamplers(styleName, monoModes = [false, false, false, false]) {
+  async function setupSamplers(styleName, notes = null, monoModes = [false, false, false, false]) {
     // Dispose old samplers and audio nodes if they exist
     if (samplers.length > 0 || volumes.length > 0 || panners.length > 0) {
       console.log("Disposing old audio resources...");
@@ -393,13 +411,25 @@ document.addEventListener('DOMContentLoaded', () => {
     // Stereo placement per voice [S, A, T, B] (-1 = left, +1 = right). Tone.Panner
     // folds each (stereo) sample to mono first, so these are real positions.
     const pans = currentPans(styleName);
+    const style = STYLE_PRESETS[styleName];
 
-    statusDiv.innerText = `Loading samples for ${STYLE_PRESETS[styleName].displayName}...`;
+    statusDiv.innerText = `Loading samples for ${style.displayName}...`;
     console.log(`Setting up samplers for style: ${styleName}`);
 
     try {
-      // Load all samplers for this style with monophonic modes
-      const loadedSamplers = await loadStyleSamplers(styleName, monoModes);
+      let loadedSamplers;
+      if (style.engine === 'vsco') {
+        // Velocity-layered samples: fetch only the files (note × layer) this piece uses
+        loadedSamplers = await createLayeredStyleSamplers(style);
+        // (each note carries its articulation: only the articulations used are loaded)
+        const counts = await Promise.all(loadedSamplers.map((s, i) =>
+          s.prepare(notes ? notes.filter(n => Math.min(Math.max(n.voice, 0), 3) === i) : null)));
+        console.log(`✓ VSCO files loaded per voice: [${counts.join(', ')}]`,
+          loadedSamplers.map(s => s.loaded || {}));
+      } else {
+        // Load all samplers for this style with monophonic modes
+        loadedSamplers = await loadStyleSamplers(styleName, monoModes);
+      }
 
       // Chain each sampler through a Volume node -> Panner -> split to (Dry + Convolver)
       for (let i = 0; i < 4; i++) {
@@ -484,14 +514,8 @@ document.addEventListener('DOMContentLoaded', () => {
           console.error(`Error loading impulse: ${error.message}`);
         }
         if (superseded()) return { ok: false, aborted: true };
-
-        // Load samplers for selected style
-        const samplerSetupSuccess = await setupSamplers(currentStyle);
-        if (superseded()) return { ok: false, aborted: true };
-        if (!samplerSetupSuccess) {
-          playBtn.disabled = false;
-          return { ok: false, error: new Error(`Could not load samples for ${currentStyle}`) };
-        }
+        // Samplers are built after the piece arrives (below), so layered styles can
+        // fetch only the files the piece needs.
       } else {
         // Dispose any existing samplers if switching to MIDI mode
         if (samplers.length > 0 || volumes.length > 0 || panners.length > 0) {
@@ -537,13 +561,45 @@ document.addEventListener('DOMContentLoaded', () => {
       console.log("Data received:", data);
       console.log("Total notes:", data.notes.length);
 
+      // Get tempo from slider (default 120 BPM)
+      const tempoSlider = document.getElementById('tempoSlider');
+      const bpm = tempoSlider ? parseInt(tempoSlider.value) : 120;
+
+      // Articulation of every note (articulation.js): a plan per section, decided per
+      // figure. VSCO styles play it with real samples; the others (and MIDI) only
+      // shorten the detached notes.
+      const style = STYLE_PRESETS[currentStyle];
+      const realArticulations = !useMidi && style.engine === 'vsco' && typeof styleArticulations === 'function';
+      const articulationProfile = articulationSelect ? articulationSelect.value : 'auto';
+      const artPlan = window.BachArticulation
+        ? BachArticulation.plan(data, {
+          profile: articulationProfile, bpm, seed: currentSeed,
+          caps: realArticulations ? styleArticulations(style) : ['sustain'],
+        })
+        : null;
+      lastArticulationPlan = artPlan;
+      const artOf = (i) => (artPlan ? artPlan.arts[i] : { art: 'sustain', solo: false, gainMul: 1 });
+      if (artPlan) console.log('Articulation plan:', artPlan.profile, artPlan.summary, artPlan.sections.map(s => s.text));
+
+      if (!useMidi) {
+        // Load samplers for selected style (layered styles: only this piece's files and articulations)
+        const annotated = data.notes.map((n, i) => ({ ...n, art: artOf(i).art, solo: artOf(i).solo }));
+        const samplerSetupSuccess = await setupSamplers(currentStyle, annotated);
+        if (superseded()) return { ok: false, aborted: true };
+        if (!samplerSetupSuccess) {
+          playBtn.disabled = false;
+          return { ok: false, error: new Error(`Could not load samples for ${currentStyle}`) };
+        }
+      }
+
       const outputMode = isMidiEnabled() ? 'MIDI' : 'Tone.js';
       statusDiv.innerHTML = `
                 <strong>Playing:</strong> ${data.meta.style} in ${data.meta.key} ${data.meta.mode}<br>
                 <strong>Style:</strong> ${STYLE_PRESETS[currentStyle].displayName}<br>
                 <strong>Output:</strong> ${outputMode}<br>
                 <strong>Progression:</strong> ${data.meta.progression}<br>
-                <strong>Expressivity:</strong> ${expressivityPreset} | Random texture: ${randomTexture ? 'on' : 'off'} | Sparse cadences: ${sparseOrnaments ? 'on' : 'off'}
+                <strong>Expressivity:</strong> ${expressivityPreset} | Random texture: ${randomTexture ? 'on' : 'off'} | Sparse cadences: ${sparseOrnaments ? 'on' : 'off'}<br>
+                <strong>Articulation:</strong> ${artPlan ? `${BachArticulation.PROFILES[artPlan.profile]}${realArticulations ? '' : ' (durations only)'} — ${[...new Set(artPlan.sections.map(s => s.text))].slice(0, 6).join(' · ')}` : 'n/a'}
             `;
 
       const useMidiOut = isMidiEnabled();
@@ -551,9 +607,6 @@ document.addEventListener('DOMContentLoaded', () => {
       // AudioContext is never started in MIDI mode, so its clock may be frozen).
       const clock = useMidiOut ? () => performance.now() / 1000 : () => Tone.now();
       const start = clock() + 0.5;
-      // Get tempo from slider (default 120 BPM)
-      const tempoSlider = document.getElementById('tempoSlider');
-      const bpm = tempoSlider ? parseInt(tempoSlider.value) : 120;
       Tone.Transport.bpm.value = bpm;
 
       // At 120 BPM, quarter note = 0.5 seconds
@@ -569,11 +622,16 @@ document.addEventListener('DOMContentLoaded', () => {
       const beatsOf = (n) => n.beats || BEATS_BY_NAME[n.duration] || 2;
 
       // Precompute every note (offset from `start`, length, dynamics), sorted by onset
-      const events = data.notes.map(note => {
+      const events = data.notes.map((note, i) => {
         const humanizeStart = (Math.random() * 0.02) - 0.01;
         const humanizeDuration = (Math.random() * 0.05);
         const at = (note.startTime * beatDuration * bpmScaleFactor) + humanizeStart;
-        const dur = (beatsOf(note) * beatDuration * bpmScaleFactor) - 0.02 + humanizeDuration;
+        let dur = (beatsOf(note) * beatDuration * bpmScaleFactor) - 0.02 + humanizeDuration;
+        const { art, solo, gainMul, slur, tight } = artOf(i);
+        // Without articulation samples a detached note is just a shorter note
+        if (!realArticulations && (art === 'staccato' || art === 'pizzicato') && typeof shortArticulationLength === 'function') {
+          dur = shortArticulationLength(dur);
+        }
 
         // Velocity for dynamics: use the generator's phrase-shaped velocity when present
         let velocity = note.velocity ? note.velocity / 127 : 0.7 + (Math.random() * 0.1);
@@ -581,6 +639,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         return {
           at,
+          play: { art, solo, slur: !!slur, tight: !!tight },
           dur: Math.max(0.03, dur),
           pitch: note.pitch,
           voice: Math.min(Math.max(note.voice, 0), 3),
@@ -588,7 +647,7 @@ document.addEventListener('DOMContentLoaded', () => {
           // Per-note gain with a squared curve (40·log10(v), the usual MIDI/DLS
           // velocity curve): v=0.55 → -10 dB, v=0.8 → -4 dB, v=1 → 0 dB.
           // Tone applies it as a linear gain on the note's own buffer source.
-          gain: velocity * velocity,
+          gain: velocity * velocity * (gainMul || 1),
         };
       }).sort((a, b) => a.at - b.at);
 
@@ -618,7 +677,10 @@ document.addEventListener('DOMContentLoaded', () => {
             } else if (samplers[ev.voice]) {
               // Works for both Tone.Sampler and Tone.PolySynth. A late tick plays the
               // note slightly late instead of dropping it.
-              samplers[ev.voice].triggerAttackRelease(ev.pitch, ev.dur, Math.max(time, Tone.now()), ev.gain);
+              // The MIDI velocity (5th argument) picks the layer of velocity-layered
+              // samplers; the 6th ({art, solo, slur, tight}) picks the articulation and
+              // phrasing of VSCO styles. Tone.Sampler ignores both.
+              samplers[ev.voice].triggerAttackRelease(ev.pitch, ev.dur, Math.max(time, Tone.now()), ev.gain, ev.midiVelocity, ev.play);
             }
           } catch (err) {
             console.warn(`Skipping note ${ev.pitch} (voice ${ev.voice}): ${err.message}`);
@@ -644,7 +706,15 @@ document.addEventListener('DOMContentLoaded', () => {
         playBtn.disabled = false;
       }, durationSecs * 1000);
 
-      return { ok: true, data, durationSecs, finished };
+      // Section timeline (for the kiosk card): seconds from the first note
+      const secsPerBeat = beatDuration * bpmScaleFactor;
+      const articulation = artPlan ? {
+        profile: artPlan.profile,
+        real: realArticulations,
+        sections: artPlan.sections.map(s => ({ ...s, atSecs: s.startBeat * secsPerBeat, endSecs: s.endBeat * secsPerBeat })),
+      } : null;
+
+      return { ok: true, data, durationSecs, finished, articulation, startsInSecs: 0.5 };
 
     } catch (e) {
       console.error(e);
@@ -667,5 +737,9 @@ document.addEventListener('DOMContentLoaded', () => {
     stopPlayback,
     setStereoLayout,
     isMidiEnabled: () => (typeof isMidiEnabled === 'function' ? isMidiEnabled() : false),
+    // Checks / debugging: the last articulation plan, and the notes each voice actually
+    // played per resolved articulation (VSCO styles)
+    lastArticulationPlan: () => lastArticulationPlan,
+    articulationStats: () => samplers.map(s => (s && s.counts ? { ...s.counts } : null)),
   };
 });

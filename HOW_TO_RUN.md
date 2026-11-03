@@ -60,10 +60,18 @@ API endpoints:
   meta: {
     key: "C", mode: "major", form: "Chorale", style: "Baroque Chorale", bars: 8,
     progression: "I - ii6 - V7 - I - ... [G] IV - V7 - I",
-    phraseMarkers: [{ index: 0, key: "C", mode: "major", cadence: "HC", startBeat: 0, endBeat: 16 }, ...]
+    phraseMarkers: [{ index: 0, key: "C", mode: "major", cadence: "HC", startBeat: 0, endBeat: 16 }, ...],
+    // Variations, Fugue and Ritornello only: the formal sections
+    sections: [{ kind: "theme", index: 0, startBeat: 0, endBeat: 32, texture: "chorale" }, ...]
   }
 }
 ```
+
+`meta.sections[].kind`: Variations → `theme`, `variation` (with `texture`: chorale,
+eighths, sixteenths, long, arpeggio, dotted); Fugue → `exposition`, `episode`, `entry`,
+`stretto`, `final`, `cadence`; Ritornello → `tutti`, `solo` (opening and closing tutti,
+then two solo phrases per tutti return). The web player uses them for its articulation
+plan (`public/articulation.js`).
 
 ### Note Fields:
 - `pitch`: Scientific pitch notation (C4 = middle C)
