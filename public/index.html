@@ -7,176 +7,666 @@
     <title>Bach Generator</title>
     <link rel="icon" type="image/x-icon" href="/favicon.ico">
     <link rel="shortcut icon" type="image/x-icon" href="/favicon.ico">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;0,700;1,500&family=EB+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=IM+Fell+English:ital@0;1&display=swap">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
     <style>
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            padding: 2rem;
-            background: #f4f4f9;
-            color: #333;
+        /* =========================================================
+           1. TOKENS — parchment (light) / candlelit (dark)
+           ========================================================= */
+        :root {
+            color-scheme: light;
+
+            --bg: #f1e6cc;
+            --leaf: #f8f0dc;
+            --panel: #fbf5e6;
+            --field: #fffaf0;
+            --ink: #2b1d14;
+            --ink-soft: #5c4632;
+            --accent: #6e1423;          /* burgundy text accents */
+            --accent-strong: #4a0d17;
+            --wax: #7a1a2a;             /* button fill */
+            --wax-deep: #4a0d17;
+            --wax-text: #f6e3a8;
+            --gold: #b8892b;
+            --gold-dark: #7a5716;       /* gold used as text (AA on parchment) */
+            --gold-soft: rgba(184, 137, 43, 0.45);
+            --track: #6e1423;
+            --shadow: rgba(74, 45, 15, 0.18);
+            --vignette: rgba(110, 70, 25, 0.20);
+            --glow: rgba(255, 251, 238, 0.75);
+
+            --gilt: linear-gradient(135deg, #6f4f12 0%, #c99a3a 22%, #f3dc94 40%, #b8892b 58%, #e9c977 78%, #7a5716 100%);
+            --gilt-line: linear-gradient(90deg, transparent, #b8892b 20%, #f0d68a 50%, #b8892b 80%, transparent);
+            --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .36 0 0 0 0 .25 0 0 0 0 .12 .22 0 0 0 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+
+            --font-display: 'Cormorant Garamond', 'EB Garamond', Garamond, 'Times New Roman', serif;
+            --font-body: 'EB Garamond', Garamond, 'Times New Roman', serif;
+            --font-period: 'IM Fell English', 'EB Garamond', Garamond, serif;
+            --font-mono: ui-monospace, 'Cascadia Mono', Consolas, 'Courier New', monospace;
         }
 
-        .container {
-            max-width: 800px;
-            margin: 0 auto;
-            background: white;
-            padding: 2rem;
-            border-radius: 12px;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
-            text-align: center;
+        @media (prefers-color-scheme: dark) {
+            :root {
+                color-scheme: dark;
+
+                --bg: #140e0a;
+                --leaf: #1a130e;
+                --panel: #201712;
+                --field: #2a1f17;
+                --ink: #efe1c1;
+                --ink-soft: #c9b48f;
+                --accent: #dcb662;
+                --accent-strong: #f0d68a;
+                --wax: #6b1322;
+                --wax-deep: #3d0a13;
+                --wax-text: #f6e3a8;
+                --gold: #c99a3a;
+                --gold-dark: #dcb662;
+                --gold-soft: rgba(201, 154, 58, 0.40);
+                --track: #8a2234;
+                --shadow: rgba(0, 0, 0, 0.55);
+                --vignette: rgba(0, 0, 0, 0.65);
+                --glow: rgba(230, 170, 70, 0.10);
+                --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .95 0 0 0 0 .8 0 0 0 0 .55 .06 0 0 0 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+            }
         }
 
-        h1 {
-            margin-bottom: 2rem;
-            font-weight: 300;
-            letter-spacing: 1px;
-        }
-
-        button {
-            padding: 12px 24px;
-            font-size: 1.1rem;
-            cursor: pointer;
-            background: #2c3e50;
-            color: white;
-            border: none;
-            border-radius: 6px;
-            transition: background 0.2s;
-        }
-
-        button:hover {
-            background: #34495e;
-        }
-
-        #status {
-            margin-top: 2rem;
-            color: #7f8c8d;
-            font-style: italic;
-        }
-
-        .controls {
-            margin-bottom: 2rem;
-        }
-
-        select {
-            padding: 12px;
-            font-size: 1.1rem;
-            border-radius: 6px;
-            border: 1px solid #ccc;
-            margin-right: 10px;
-        }
-
-        .seed-controls {
-            margin-top: 1.5rem;
-            padding: 1rem;
-            background: #f9f9f9;
-            border-radius: 8px;
-            font-size: 0.95rem;
-        }
-
-        .seed-controls label {
-            display: block;
-            margin: 0.5rem 0;
-            cursor: pointer;
-        }
-
-        .seed-controls input[type="text"] {
-            padding: 8px;
-            font-size: 0.9rem;
-            width: 300px;
-            margin-top: 0.5rem;
-            font-family: monospace;
-        }
-
-        #seedDisplay {
-            margin-top: 1rem;
-            font-size: 0.85rem;
-            color: #666;
-            font-family: monospace;
-            word-break: break-all;
-        }
-
-        .reverb-controls {
-            margin-top: 2rem;
-            padding: 1.5rem;
-            background: #f0f7ff;
-            border-radius: 8px;
-            border-left: 4px solid #3498db;
-        }
-
-        .reverb-controls h3 {
-            margin: 0 0 1rem 0;
-            font-size: 1rem;
-            color: #2c3e50;
-            font-weight: 600;
-        }
-
-        .reverb-controls label {
-            display: block;
-            text-align: left;
-            margin: 0.8rem 0;
-            font-size: 0.95rem;
-            color: #333;
-        }
-
-        .reverb-controls select {
-            width: 100%;
-            margin: 0.5rem 0 0 0;
+        /* =========================================================
+           2. PAGE & PARCHMENT
+           ========================================================= */
+        *,
+        *::before,
+        *::after {
             box-sizing: border-box;
         }
 
+        html {
+            -webkit-text-size-adjust: 100%;
+        }
+
+        body {
+            margin: 0;
+            padding: 2rem 1rem 3rem;
+            font-family: var(--font-body);
+            font-size: 1.0625rem;
+            line-height: 1.5;
+            color: var(--ink);
+            background-color: var(--bg);
+            background-image:
+                var(--grain),
+                radial-gradient(ellipse 70% 45% at 50% 0%, var(--glow), transparent 70%),
+                radial-gradient(ellipse 120% 90% at 50% 50%, transparent 55%, var(--vignette) 100%);
+            background-attachment: fixed;
+            overflow-x: hidden;
+        }
+
+        .container {
+            max-width: 960px;
+            margin: 0 auto;
+            text-align: center;
+        }
+
+        :focus-visible {
+            outline: 2px solid var(--gold);
+            outline-offset: 3px;
+        }
+
+        /* =========================================================
+           3. FRONTISPIECE
+           ========================================================= */
+        .frontispiece {
+            margin: 0 auto 2rem;
+            padding: 0 0.5rem;
+        }
+
+        .frontispiece .overline {
+            margin: 0 0 0.6rem;
+            font-family: var(--font-display);
+            font-variant: small-caps;
+            letter-spacing: 0.28em;
+            font-size: 0.95rem;
+            color: var(--gold-dark);
+        }
+
+        h1 {
+            margin: 0;
+            font-family: var(--font-display);
+            font-weight: 600;
+            font-size: clamp(2.1rem, 6vw, 3.6rem);
+            line-height: 1.1;
+            letter-spacing: 0.02em;
+            color: var(--ink);
+        }
+
+        h1 .initial {
+            font-family: var(--font-period);
+            font-weight: 400;
+            font-size: 1.55em;
+            line-height: 0;
+            vertical-align: -0.1em;
+            margin-right: 0.02em;
+            color: var(--accent);
+            text-shadow: 1px 1px 0 var(--gold-soft);
+        }
+
+        .frontispiece .subtitle {
+            margin: 0.7rem auto 0;
+            max-width: 34rem;
+            font-family: var(--font-period);
+            font-style: italic;
+            font-size: 1.15rem;
+            color: var(--ink-soft);
+        }
+
+        .frontispiece .motto {
+            margin: 0.4rem 0 0;
+            font-family: var(--font-display);
+            font-variant: small-caps;
+            letter-spacing: 0.35em;
+            font-size: 0.9rem;
+            color: var(--accent);
+        }
+
+        /* Fleuron divider: ——— ❧ ——— */
+        .fleuron {
+            display: flex;
+            align-items: center;
+            gap: 0.9rem;
+            max-width: 26rem;
+            margin: 1.6rem auto;
+            color: var(--gold);
+            font-size: 1.5rem;
+            line-height: 1;
+            font-family: 'Segoe UI Symbol', 'DejaVu Sans', var(--font-body);
+        }
+
+        .fleuron::before,
+        .fleuron::after {
+            content: "";
+            flex: 1;
+            height: 1px;
+            background: var(--gilt-line);
+        }
+
+        .frontispiece .fleuron {
+            margin: 1rem auto 0;
+        }
+
+        /* =========================================================
+           4. CARTOUCHE (main control area)
+           ========================================================= */
+        .cartouche {
+            position: relative;
+            padding: 2.25rem 2rem 2rem;
+            border: 3px solid transparent;
+            border-radius: 4px;
+            background:
+                linear-gradient(var(--panel), var(--panel)) padding-box,
+                var(--gilt) border-box;
+            box-shadow: 0 10px 30px var(--shadow), 0 1px 0 rgba(255, 255, 255, 0.25) inset;
+        }
+
+        /* inner hairline = gilded double rule */
+        .cartouche::before {
+            content: "";
+            position: absolute;
+            inset: 7px;
+            border: 1px solid var(--gold-soft);
+            border-radius: 2px;
+            pointer-events: none;
+        }
+
+        .corner {
+            position: absolute;
+            width: 54px;
+            height: 54px;
+            color: var(--gold);
+            pointer-events: none;
+        }
+
+        .corner svg {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+
+        .corner.tl { top: -3px; left: -3px; }
+        .corner.tr { top: -3px; right: -3px; transform: scaleX(-1); }
+        .corner.bl { bottom: -3px; left: -3px; transform: scaleY(-1); }
+        .corner.br { bottom: -3px; right: -3px; transform: scale(-1, -1); }
+
+        .cartouche-title {
+            margin: 0 0 1.25rem;
+            font-family: var(--font-display);
+            font-variant: small-caps;
+            font-weight: 600;
+            font-size: 1.15rem;
+            letter-spacing: 0.22em;
+            color: var(--accent);
+        }
+
+        .control-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(min(100%, 9.5rem), 1fr));
+            gap: 1rem 1.1rem;
+            text-align: left;
+        }
+
+        .field {
+            display: flex;
+            flex-direction: column;
+            gap: 0.3rem;
+            min-width: 0;
+        }
+
+        .field-label {
+            font-family: var(--font-display);
+            font-variant: small-caps;
+            font-weight: 600;
+            letter-spacing: 0.12em;
+            font-size: 1rem;
+            color: var(--ink-soft);
+        }
+
+        /* Row that holds the main action(s). Kiosk/autoplay toggle can sit here. */
+        .play-row {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: center;
+            gap: 1rem 1.5rem;
+            margin-top: 1.75rem;
+        }
+
+        /* =========================================================
+           5. FORM CONTROLS
+           ========================================================= */
+        select,
+        input[type="text"] {
+            font-family: var(--font-body);
+            font-size: 1.05rem;
+            color: var(--ink);
+            background-color: var(--field);
+            border: 1px solid var(--gold-soft);
+            border-bottom-color: var(--gold);
+            border-radius: 3px;
+            padding: 0.55rem 0.7rem;
+            box-shadow: inset 0 1px 3px var(--shadow);
+            transition: border-color 0.15s, box-shadow 0.15s;
+            max-width: 100%;
+        }
+
+        select {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 100%;
+            padding-right: 2.2rem;
+            cursor: pointer;
+            background-image:
+                linear-gradient(45deg, transparent 50%, var(--accent) 50%),
+                linear-gradient(135deg, var(--accent) 50%, transparent 50%);
+            background-position:
+                calc(100% - 1.05rem) 52%,
+                calc(100% - 0.7rem) 52%;
+            background-size: 0.35rem 0.35rem, 0.35rem 0.35rem;
+            background-repeat: no-repeat;
+        }
+
+        select option {
+            background: var(--field);
+            color: var(--ink);
+        }
+
+        select:hover,
+        input[type="text"]:hover {
+            border-color: var(--gold);
+        }
+
+        select:focus-visible,
+        input[type="text"]:focus-visible {
+            outline: none;
+            border-color: var(--gold);
+            box-shadow: inset 0 1px 3px var(--shadow), 0 0 0 3px var(--gold-soft);
+        }
+
+        input[type="checkbox"] {
+            accent-color: var(--wax);
+            width: 1.05rem;
+            height: 1.05rem;
+            margin: 0 0.55rem 0 0;
+            flex: none;
+            cursor: pointer;
+            vertical-align: -0.15em;
+        }
+
+        @media (prefers-color-scheme: dark) {
+            input[type="checkbox"] {
+                accent-color: var(--gold);
+            }
+        }
+
+        /* Range: burgundy track, gilded thumb */
+        input[type="range"] {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 100%;
+            height: 1.4rem;
+            margin: 0.35rem 0 0;
+            background: transparent;
+            cursor: pointer;
+        }
+
+        input[type="range"]::-webkit-slider-runnable-track {
+            height: 6px;
+            border-radius: 3px;
+            background: linear-gradient(var(--track), var(--wax-deep));
+            box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.35), 0 0 0 1px var(--gold-soft);
+        }
+
+        input[type="range"]::-moz-range-track {
+            height: 6px;
+            border-radius: 3px;
+            background: linear-gradient(var(--track), var(--wax-deep));
+            box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.35), 0 0 0 1px var(--gold-soft);
+        }
+
+        input[type="range"]::-moz-range-progress {
+            height: 6px;
+            border-radius: 3px;
+            background: var(--gilt);
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 20px;
+            height: 20px;
+            margin-top: -7px;
+            border-radius: 50%;
+            border: 1px solid #5a3f0e;
+            background: radial-gradient(circle at 35% 30%, #fbeab0 0%, #d9ad4f 40%, #b8892b 62%, #6f4f12 100%);
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
+            transition: transform 0.12s;
+        }
+
+        input[type="range"]::-moz-range-thumb {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            border: 1px solid #5a3f0e;
+            background: radial-gradient(circle at 35% 30%, #fbeab0 0%, #d9ad4f 40%, #b8892b 62%, #6f4f12 100%);
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
+            transition: transform 0.12s;
+        }
+
+        input[type="range"]:hover::-webkit-slider-thumb,
+        input[type="range"]:focus-visible::-webkit-slider-thumb {
+            transform: scale(1.15);
+        }
+
+        input[type="range"]:hover::-moz-range-thumb,
+        input[type="range"]:focus-visible::-moz-range-thumb {
+            transform: scale(1.15);
+        }
+
+        input[type="range"]:focus-visible {
+            outline: none;
+        }
+
+        input[type="range"]:focus-visible::-webkit-slider-thumb {
+            box-shadow: 0 0 0 4px var(--gold-soft), 0 1px 3px rgba(0, 0, 0, 0.45);
+        }
+
+        input[type="range"]:focus-visible::-moz-range-thumb {
+            box-shadow: 0 0 0 4px var(--gold-soft), 0 1px 3px rgba(0, 0, 0, 0.45);
+        }
+
+        /* =========================================================
+           6. BUTTONS
+           ========================================================= */
+        button {
+            font-family: var(--font-display);
+            cursor: pointer;
+        }
+
+        /* Gilded plaque with wax-red field — primary action */
+        .btn-plaque {
+            position: relative;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.7rem;
+            min-height: 3.25rem;
+            padding: 0.7rem 2.2rem;
+            font-size: 1.3rem;
+            font-weight: 700;
+            font-variant: small-caps;
+            letter-spacing: 0.14em;
+            color: var(--wax-text);
+            text-shadow: 0 1px 1px rgba(0, 0, 0, 0.5);
+            border: 3px solid transparent;
+            border-radius: 999px;
+            background:
+                radial-gradient(ellipse at 50% 30%, #a3283d 0%, var(--wax) 55%, var(--wax-deep) 100%) padding-box,
+                var(--gilt) border-box;
+            box-shadow:
+                inset 0 0 0 1px rgba(246, 227, 168, 0.35),
+                inset 0 -3px 6px rgba(0, 0, 0, 0.35),
+                0 4px 12px var(--shadow);
+            transition: transform 0.15s, filter 0.15s, box-shadow 0.15s;
+        }
+
+        .btn-plaque::before,
+        .btn-plaque::after {
+            content: "❦";
+            font-family: 'Segoe UI Symbol', 'DejaVu Sans', serif;
+            font-size: 0.85em;
+            font-variant: normal;
+            color: #e9c977;
+        }
+
+        .btn-plaque::after {
+            transform: scaleX(-1);
+        }
+
+        .btn-plaque:hover:not(:disabled) {
+            filter: brightness(1.12);
+            transform: translateY(-1px);
+            box-shadow:
+                inset 0 0 0 1px rgba(246, 227, 168, 0.5),
+                inset 0 -3px 6px rgba(0, 0, 0, 0.35),
+                0 8px 18px var(--shadow);
+        }
+
+        .btn-plaque:active:not(:disabled) {
+            transform: translateY(1px);
+            filter: brightness(0.95);
+        }
+
+        .btn-plaque:focus-visible {
+            outline: 3px solid var(--gold);
+            outline-offset: 4px;
+        }
+
+        .btn-plaque:disabled {
+            cursor: progress;
+            filter: saturate(0.4) brightness(0.85);
+        }
+
+        /* Quiet gilt-edged button — secondary actions */
+        .btn-quiet {
+            padding: 0.5rem 1.3rem;
+            font-size: 1.05rem;
+            font-weight: 600;
+            font-variant: small-caps;
+            letter-spacing: 0.1em;
+            color: var(--accent);
+            background: var(--field);
+            border: 1px solid var(--gold);
+            border-radius: 3px;
+            box-shadow: inset 0 0 0 2px var(--field), inset 0 0 0 3px var(--gold-soft);
+            transition: background 0.15s, color 0.15s;
+        }
+
+        .btn-quiet:hover:not(:disabled) {
+            background: var(--wax);
+            color: var(--wax-text);
+            box-shadow: inset 0 0 0 2px var(--wax), inset 0 0 0 3px rgba(233, 201, 119, 0.6);
+        }
+
+        .btn-quiet:disabled {
+            opacity: 0.55;
+            cursor: not-allowed;
+        }
+
+        /* =========================================================
+           7. STATUS (inscription under the cartouche)
+           ========================================================= */
+        #status {
+            margin: 1.4rem auto 0;
+            max-width: 40rem;
+            padding: 0.8rem 1rem;
+            font-family: var(--font-period);
+            font-style: italic;
+            font-size: 1.05rem;
+            line-height: 1.6;
+            color: var(--ink-soft);
+            border-top: 1px solid var(--gold-soft);
+            border-bottom: 1px solid var(--gold-soft);
+            overflow-wrap: anywhere;
+        }
+
+        #status strong {
+            font-family: var(--font-display);
+            font-style: normal;
+            font-variant: small-caps;
+            font-weight: 700;
+            letter-spacing: 0.06em;
+            color: var(--accent);
+        }
+
+        /* =========================================================
+           8. PANELS (gilded double-rule)
+           ========================================================= */
+        .panels {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
+            gap: 1.25rem;
+            text-align: left;
+        }
+
+        .panel,
+        .reverb-controls,
+        .midi-controls,
+        .seed-controls {
+            position: relative;
+            margin: 0;
+            padding: 1.4rem 1.4rem 1.3rem;
+            text-align: left;
+            background-color: var(--panel);
+            border: 3px double var(--gold);
+            border-radius: 2px;
+            box-shadow: 0 0 0 4px var(--panel), 0 0 0 5px var(--gold-soft), 0 6px 18px var(--shadow);
+        }
+
+        .wide-panels {
+            display: grid;
+            gap: 1.75rem;
+            margin-top: 0;
+        }
+
+        .reverb-controls h3,
+        .midi-controls h3,
+        .seed-controls h3 {
+            margin: 0 0 1rem;
+            text-align: center;
+            font-family: var(--font-display);
+            font-variant: small-caps;
+            font-weight: 600;
+            font-size: 1.3rem;
+            letter-spacing: 0.16em;
+            color: var(--accent);
+        }
+
+        .reverb-controls h3::after,
+        .midi-controls h3::after,
+        .seed-controls h3::after {
+            content: "";
+            display: block;
+            width: 4.5rem;
+            height: 1px;
+            margin: 0.35rem auto 0;
+            background: var(--gilt-line);
+        }
+
+        .reverb-controls label,
+        .midi-device-container label,
+        .stack-label {
+            display: block;
+            margin: 0.8rem 0;
+            text-align: left;
+            font-size: 1rem;
+            color: var(--ink);
+        }
+
+        .reverb-controls select,
+        .midi-device-container select {
+            display: block;
+            width: 100%;
+            margin: 0.4rem 0 0;
+        }
+
+        label.check-row {
+            display: flex;
+            align-items: flex-start;
+            margin: 0.6rem 0;
+            cursor: pointer;
+            line-height: 1.4;
+        }
+
+        .check-row input[type="checkbox"] {
+            margin-top: 0.15rem;
+        }
+
         .reverb-mix-container {
-            margin-top: 1rem;
+            margin-top: 0.6rem;
         }
 
         .reverb-mix-container label {
             display: flex;
-            align-items: center;
+            align-items: baseline;
             justify-content: space-between;
-            margin-bottom: 0.5rem;
-        }
-
-        .reverb-mix-container input[type="range"] {
-            width: 100%;
-            margin-top: 0.5rem;
-            cursor: pointer;
+            gap: 0.75rem;
+            margin: 0 0 0.25rem;
         }
 
         .reverb-mix-value {
-            font-weight: 600;
-            color: #3498db;
-            min-width: 40px;
+            font-family: var(--font-display);
+            font-weight: 700;
+            font-size: 1.1rem;
+            color: var(--gold-dark);
+            min-width: 3.5rem;
             text-align: right;
+            white-space: nowrap;
+            font-variant-numeric: oldstyle-nums;
         }
 
-        .midi-controls {
-            margin-top: 2rem;
-            padding: 1.5rem;
-            background: #f0f9ff;
-            border-radius: 8px;
-            border-left: 4px solid #0ea5e9;
+        .hint {
+            display: block;
+            margin-top: 0.5rem;
+            font-style: italic;
+            font-size: 0.92rem;
+            color: var(--ink-soft);
         }
 
-        .midi-controls h3 {
-            margin: 0 0 1rem 0;
-            font-size: 1rem;
-            color: #2c3e50;
-            font-weight: 600;
-        }
-
+        /* =========================================================
+           9. MIDI
+           ========================================================= */
         .midi-device-container {
             margin: 1rem 0;
-        }
-
-        .midi-device-container label {
-            display: block;
-            text-align: left;
-            margin-bottom: 0.5rem;
-        }
-
-        .midi-device-container select {
-            width: 100%;
-            margin-top: 0.5rem;
-            box-sizing: border-box;
         }
 
         .midi-voice-controls {
@@ -184,357 +674,792 @@
         }
 
         .midi-voice-controls h4 {
-            margin: 0 0 1rem 0;
-            font-size: 0.95rem;
-            color: #2c3e50;
+            margin: 0 0 0.9rem;
+            text-align: center;
+            font-family: var(--font-display);
+            font-variant: small-caps;
             font-weight: 600;
+            font-size: 1.1rem;
+            letter-spacing: 0.14em;
+            color: var(--ink-soft);
+        }
+
+        .voice-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr));
+            gap: 1rem;
         }
 
         .voice-control {
-            margin-bottom: 1rem;
-            padding: 1rem;
-            background: #ffffff;
-            border-radius: 6px;
-            border: 1px solid #e2e8f0;
+            padding: 0.9rem 1rem 1rem;
+            background: var(--field);
+            border: 1px solid var(--gold-soft);
+            border-left: 3px solid var(--wax);
+            border-radius: 2px;
         }
 
         .voice-control h5 {
-            margin: 0 0 0.8rem 0;
-            font-size: 0.9rem;
-            color: #2c3e50;
-            font-weight: 600;
+            margin: 0 0 0.6rem;
+            font-family: var(--font-period);
+            font-weight: 400;
+            font-style: italic;
+            font-size: 1.15rem;
+            color: var(--accent);
         }
 
         .control-row {
             display: flex;
             flex-wrap: wrap;
-            gap: 1rem;
-            align-items: center;
+            gap: 0.75rem 1rem;
+            align-items: flex-start;
         }
 
         .control-row label {
             display: flex;
             flex-direction: column;
-            min-width: 150px;
-            font-size: 0.85rem;
+            flex: 1 1 7.5rem;
+            min-width: 0;
+            margin: 0;
+            font-family: var(--font-display);
+            font-variant: small-caps;
+            font-weight: 600;
+            letter-spacing: 0.06em;
+            font-size: 0.98rem;
+            color: var(--ink-soft);
         }
 
         .midi-channel-select {
             margin-top: 0.3rem;
-            padding: 6px;
-            font-size: 0.85rem;
-            border-radius: 4px;
-            border: 1px solid #ccc;
+            padding: 0.35rem 2rem 0.35rem 0.55rem;
+            font-size: 0.98rem;
         }
 
         .midi-volume-slider,
         .midi-pan-slider {
             margin-top: 0.3rem;
-            cursor: pointer;
         }
 
         .midi-volume-value,
         .midi-pan-value {
-            font-weight: 600;
-            color: #0ea5e9;
-            min-width: 30px;
+            align-self: flex-end;
+            font-family: var(--font-display);
+            font-variant: normal;
+            font-weight: 700;
+            color: var(--gold-dark);
+            min-width: 2rem;
             text-align: right;
+            font-variant-numeric: oldstyle-nums;
         }
 
         .midi-auto-pan {
-            margin-top: 1rem;
+            margin-top: 1.1rem;
             text-align: center;
         }
 
-        #autoPanBtn {
-            padding: 8px 16px;
-            font-size: 0.9rem;
-            background: #0ea5e9;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            transition: background 0.2s;
+        /* =========================================================
+           10. SEED
+           ========================================================= */
+        .seed-controls input[type="text"] {
+            display: block;
+            width: 100%;
+            max-width: 30rem;
+            margin: 0.5rem 0 0;
+            font-family: var(--font-mono);
+            font-size: 0.92rem;
         }
 
-        #autoPanBtn:hover {
-            background: #0284c7;
+        #seedDisplay {
+            margin-top: 0.9rem;
+            font-family: var(--font-mono);
+            font-size: 0.85rem;
+            color: var(--ink-soft);
+            word-break: break-all;
+        }
+
+        /* =========================================================
+           11. COLOPHON
+           ========================================================= */
+        .colophon {
+            margin-top: 0.5rem;
+            font-family: var(--font-period);
+            font-style: italic;
+            font-size: 0.95rem;
+            color: var(--ink-soft);
+        }
+
+        /* =========================================================
+           11b. KIOSK (endless autoplay)
+           ========================================================= */
+        .kiosk-stage[hidden],
+        .kiosk-overlay[hidden] {
+            display: none !important;
+        }
+
+        /* While active, only the frontispiece and the now-playing card remain */
+        body.kiosk-on .container > :not(.frontispiece):not(#kioskStage) {
+            display: none !important;
+        }
+
+        body.kiosk-on .frontispiece .subtitle,
+        body.kiosk-on .frontispiece .motto {
+            display: none;
+        }
+
+        body.kiosk-on .frontispiece {
+            margin-bottom: 1.5rem;
+        }
+
+        body.kiosk-armed {
+            overflow: hidden;
+        }
+
+        .kiosk-stage {
+            max-width: 46rem;
+            margin: 0 auto;
+            padding: 2.75rem 2.5rem 2.25rem;
+            text-align: center;
+        }
+
+        .kiosk-kicker {
+            margin: 0 0 0.75rem;
+            font-family: var(--font-display);
+            font-variant: small-caps;
+            letter-spacing: 0.28em;
+            font-size: 1rem;
+            color: var(--gold-dark);
+        }
+
+        .kiosk-title {
+            margin: 0;
+            font-family: var(--font-period);
+            font-weight: 400;
+            font-size: clamp(2.1rem, 7vw, 3.8rem);
+            line-height: 1.1;
+            color: var(--accent);
+            text-shadow: 1px 1px 0 var(--gold-soft);
+            overflow-wrap: anywhere;
+        }
+
+        .kiosk-subtitle {
+            margin: 0.7rem 0 0;
+            font-family: var(--font-display);
+            font-style: italic;
+            font-weight: 500;
+            font-size: clamp(1.2rem, 3.6vw, 1.6rem);
+            color: var(--ink);
+        }
+
+        .kiosk-stage .kiosk-fleuron {
+            margin: 1.1rem auto;
+            max-width: 18rem;
+        }
+
+        .kiosk-details {
+            margin: 0 auto;
+            max-width: 36rem;
+            font-family: var(--font-display);
+            font-variant: small-caps;
+            letter-spacing: 0.08em;
+            font-size: 1.05rem;
+            color: var(--ink-soft);
+        }
+
+        .kiosk-progress {
+            position: relative;
+            height: 8px;
+            margin: 1.6rem auto 0;
+            max-width: 32rem;
+            border-radius: 4px;
+            background: linear-gradient(var(--track), var(--wax-deep));
+            box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.35), 0 0 0 1px var(--gold-soft);
+            overflow: hidden;
+        }
+
+        .kiosk-progress-fill {
+            display: block;
+            width: 0%;
+            height: 100%;
+            background: var(--gilt);
+            transition: width 0.5s linear;
+        }
+
+        .kiosk-time {
+            margin: 0.5rem 0 0;
+            font-family: var(--font-display);
+            font-weight: 600;
+            font-size: 1.05rem;
+            color: var(--gold-dark);
+            font-variant-numeric: oldstyle-nums tabular-nums;
+        }
+
+        .kiosk-state {
+            min-height: 1.6em;
+            margin: 0.9rem 0 0;
+            font-family: var(--font-period);
+            font-style: italic;
+            font-size: 1.1rem;
+            color: var(--ink-soft);
+        }
+
+        .kiosk-seed {
+            margin: 0.4rem 0 0;
+            font-family: var(--font-mono);
+            font-size: 0.8rem;
+            color: var(--ink-soft);
+            opacity: 0.8;
+            word-break: break-all;
+        }
+
+        .kiosk-actions {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem 1rem;
+            margin-top: 1.5rem;
+        }
+
+        .kiosk-actions .hint {
+            margin: 0;
+        }
+
+        /* "Tap to begin" — full-screen parchment / candlelit veil */
+        .kiosk-overlay {
+            position: fixed;
+            inset: 0;
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            padding: 1rem;
+            border: 0;
+            color: var(--ink);
+            text-align: center;
+            cursor: pointer;
+            background-color: var(--bg);
+            background-image:
+                var(--grain),
+                radial-gradient(ellipse 60% 45% at 50% 45%, var(--glow), transparent 70%),
+                radial-gradient(ellipse 120% 90% at 50% 50%, transparent 50%, var(--vignette) 100%);
+        }
+
+        .kiosk-overlay:focus-visible {
+            outline: none;
+        }
+
+        .kiosk-overlay:focus-visible .kiosk-overlay-frame {
+            box-shadow: 0 10px 30px var(--shadow), 0 0 0 4px var(--gold-soft);
+        }
+
+        .kiosk-overlay-frame {
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0.4rem;
+            width: min(100%, 34rem);
+            padding: 2.5rem 1.5rem 2.25rem;
+            border: 3px solid transparent;
+            border-radius: 4px;
+            background:
+                linear-gradient(var(--panel), var(--panel)) padding-box,
+                var(--gilt) border-box;
+            box-shadow: 0 10px 30px var(--shadow);
+        }
+
+        .kiosk-overlay-frame::before {
+            content: "";
+            position: absolute;
+            inset: 7px;
+            border: 1px solid var(--gold-soft);
+            border-radius: 2px;
+            pointer-events: none;
+        }
+
+        .kiosk-overlay-overline {
+            font-family: var(--font-display);
+            font-variant: small-caps;
+            letter-spacing: 0.28em;
+            font-size: 0.95rem;
+            color: var(--gold-dark);
+        }
+
+        .kiosk-overlay-title {
+            font-family: var(--font-display);
+            font-weight: 600;
+            font-size: clamp(2rem, 8vw, 3.2rem);
+            line-height: 1.15;
+        }
+
+        .kiosk-overlay-title .initial {
+            font-family: var(--font-period);
+            font-weight: 400;
+            font-size: 1.4em;
+            line-height: 0;
+            color: var(--accent);
+            text-shadow: 1px 1px 0 var(--gold-soft);
+        }
+
+        .kiosk-overlay .fleuron {
+            width: 100%;
+            max-width: 16rem;
+            margin: 0.6rem auto;
+        }
+
+        .kiosk-overlay-cta {
+            font-family: var(--font-display);
+            font-variant: small-caps;
+            font-weight: 700;
+            letter-spacing: 0.2em;
+            font-size: clamp(1.3rem, 4.5vw, 1.7rem);
+            color: var(--accent);
+            animation: kiosk-breathe 2.8s ease-in-out infinite;
+        }
+
+        .kiosk-overlay-sub {
+            font-family: var(--font-period);
+            font-style: italic;
+            font-size: 1.05rem;
+            color: var(--ink-soft);
+        }
+
+        @keyframes kiosk-breathe {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.55; }
+        }
+
+        /* =========================================================
+           12. SMALL SCREENS
+           ========================================================= */
+        @media (max-width: 600px) {
+            body {
+                padding: 1.25rem 0.75rem 2rem;
+            }
+
+            .cartouche {
+                padding: 1.9rem 1.1rem 1.5rem;
+            }
+
+            .corner {
+                width: 38px;
+                height: 38px;
+            }
+
+            .panel,
+            .reverb-controls,
+            .midi-controls,
+            .seed-controls {
+                padding: 1.15rem 1rem 1.1rem;
+            }
+
+            .btn-plaque {
+                width: 100%;
+                padding: 0.7rem 1.2rem;
+                font-size: 1.2rem;
+            }
+
+            .kiosk-stage {
+                padding: 2.1rem 1.1rem 1.6rem;
+            }
+
+            .kiosk-kicker {
+                letter-spacing: 0.18em;
+            }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            * {
+                transition: none !important;
+            }
+
+            .kiosk-overlay-cta {
+                animation: none;
+            }
         }
     </style>
 </head>
 
 <body>
+    <!-- Corner flourish, reused by the cartouche -->
+    <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+        <symbol id="cornerFlourish" viewBox="0 0 60 60">
+            <g fill="none" stroke="currentColor" stroke-linecap="round">
+                <path d="M3 57 V22 C3 11 11 3 22 3 H57" stroke-width="2.2" />
+                <path d="M10 46 V25 C10 16.5 16.5 10 25 10 H46" stroke-width="1" />
+                <path d="M17 33 C17 23 23 17 33 17 C28 21 27 27 30 30 C33 33 37 31 37 27" stroke-width="1.3" />
+                <path d="M33 17 C23 17 17 23 17 33 C21 28 27 27 30 30" stroke-width="1.3" opacity=".7" />
+            </g>
+            <circle cx="3" cy="3" r="2.6" fill="currentColor" />
+            <circle cx="52" cy="10" r="1.5" fill="currentColor" />
+            <circle cx="10" cy="52" r="1.5" fill="currentColor" />
+        </symbol>
+    </svg>
+
+    <!-- Shown for ?kiosk / #kiosk URLs: audio needs a user gesture before it can start -->
+    <button id="kioskOverlay" class="kiosk-overlay" type="button" hidden aria-label="Tap to begin the endless concert">
+        <span class="kiosk-overlay-frame">
+            <span class="kiosk-overlay-overline">Opus Algorithmicum</span>
+            <span class="kiosk-overlay-title"><span class="initial">C</span>oncerto perpetuo</span>
+            <span class="fleuron" aria-hidden="true">❦</span>
+            <span class="kiosk-overlay-cta">Tap to begin</span>
+            <span class="kiosk-overlay-sub">An endless sequence of pieces, each composed anew</span>
+        </span>
+    </button>
+
     <div class="container">
-        <h1>Bach-Style Generator</h1>
-        <div class="controls">
-            <select id="keySelect">
-                <option value="C">C</option>
-                <option value="C#">C♯ / D♭</option>
-                <option value="D">D</option>
-                <option value="Eb">E♭</option>
-                <option value="E">E</option>
-                <option value="F">F</option>
-                <option value="F#">F♯ / G♭</option>
-                <option value="G">G</option>
-                <option value="Ab">A♭</option>
-                <option value="A">A</option>
-                <option value="Bb">B♭</option>
-                <option value="B">B</option>
-            </select>
-            <select id="modeSelect">
-                <option value="major">Major</option>
-                <option value="minor">Minor</option>
-            </select>
-            <select id="formSelect">
-                <option value="Chorale">Chorale</option>
-                <option value="Prelude">Prelude</option>
-                <option value="Fugue">Fugue</option>
-                <option value="Ritornello">Ritornello</option>
-                <option value="Variations">Variations</option>
-                <option value="Suite">Suite</option>
-            </select>
-            <select id="styleSelect">
-                <option value="Strings">Strings (Quartet)</option>
-                <option value="Piano">Piano (Solo)</option>
-                <option value="Woodwinds">Woodwinds (Quartet)</option>
-                <option value="Brass">Brass (Quartet)</option>
-                <option value="Choir">Choir (Chorus)</option>
-                <option value="Harp">Harp (Solo)</option>
-                <option value="Mixed">Mixed Orchestra</option>
-            </select>
-            <select id="durationSelect">
-                <option value="1">Short (~1m)</option>
-                <option value="3">Medium (~3m)</option>
-                <option value="5">Long (~5m)</option>
-            </select>
-            <button id="playBtn">Generate & Play</button>
-        </div>
-        <div class="reverb-controls" style="margin-top: 1.5rem;">
-            <h3>✨ Expressivity</h3>
-            <label style="display:block; text-align:left; margin-bottom:0.8rem;">
-                Profile (1 per style default):
-                <select id="expressivityPreset" style="margin-top:0.4rem; width:100%;">
-                    <option value="style">Style Default</option>
-                    <option value="delicate">Delicate</option>
-                    <option value="lyrical">Lyrical</option>
-                    <option value="bold">Bold</option>
-                </select>
-            </label>
-            <label style="display:block; text-align:left; margin:0.6rem 0;">
-                <input type="checkbox" id="randomTextureCheck" checked>
-                Pick 1 of 3 textures randomly (space / dynamics / articulation)
-            </label>
-            <label style="display:block; text-align:left; margin:0.6rem 0;">
-                <input type="checkbox" id="sparseOrnamentsCheck" checked>
-                Keep ornaments sparse near cadences
-            </label>
-        </div>
-        <div class="reverb-controls">
-            <h3>🎶 Ornaments</h3>
-            <div class="reverb-mix-container">
-                <label>
-                    Ornament Density:
-                    <span class="reverb-mix-value"><span id="ornamentDensityValue">50</span>%</span>
+        <header class="frontispiece">
+            <p class="overline">Opus Algorithmicum</p>
+            <h1><span class="initial">B</span>ach-Style Generator</h1>
+            <p class="subtitle">Chorales, Preludes, Fugues &amp; Suites composed anew after the manner of
+                J.&nbsp;S.&nbsp;Bach</p>
+            <p class="motto">Soli Deo Gloria</p>
+            <div class="fleuron" aria-hidden="true">❦</div>
+        </header>
+
+        <section class="controls cartouche" aria-label="Composition">
+            <span class="corner tl" aria-hidden="true"><svg><use href="#cornerFlourish" /></svg></span>
+            <span class="corner tr" aria-hidden="true"><svg><use href="#cornerFlourish" /></svg></span>
+            <span class="corner bl" aria-hidden="true"><svg><use href="#cornerFlourish" /></svg></span>
+            <span class="corner br" aria-hidden="true"><svg><use href="#cornerFlourish" /></svg></span>
+
+            <h2 class="cartouche-title">The Composition</h2>
+            <div class="control-grid">
+                <label class="field">
+                    <span class="field-label">Key</span>
+                    <select id="keySelect">
+                        <option value="C">C</option>
+                        <option value="C#">C♯ / D♭</option>
+                        <option value="D">D</option>
+                        <option value="Eb">E♭</option>
+                        <option value="E">E</option>
+                        <option value="F">F</option>
+                        <option value="F#">F♯ / G♭</option>
+                        <option value="G">G</option>
+                        <option value="Ab">A♭</option>
+                        <option value="A">A</option>
+                        <option value="Bb">B♭</option>
+                        <option value="B">B</option>
+                    </select>
                 </label>
-                <input type="range" id="ornamentDensity" min="0" max="100" value="50" step="5">
-                <small style="display:block; margin-top: 0.5rem; color: #666;">Higher = more passing tones, neighbor
-                    tones, suspensions</small>
-            </div>
-        </div>
-        <div class="reverb-controls">
-            <h3>⏱️ Tempo</h3>
-            <div class="reverb-mix-container">
-                <label>
-                    Beats Per Minute (BPM):
-                    <span class="reverb-mix-value"><span id="tempoValue">120</span> BPM</span>
+                <label class="field">
+                    <span class="field-label">Mode</span>
+                    <select id="modeSelect">
+                        <option value="major">Major</option>
+                        <option value="minor">Minor</option>
+                    </select>
                 </label>
-                <input type="range" id="tempoSlider" min="40" max="200" value="120" step="5">
-                <small style="display:block; margin-top: 0.5rem; color: #666;">Adjust playback speed (40-200
-                    BPM)</small>
-            </div>
-        </div>
-        <div class="reverb-controls">
-            <h3>🎵 Reverb Effect</h3>
-            <label>
-                Impulse Response:
-                <select id="impulseSelect">
-                    <option value="none">No Reverb</option>
-                    <option value="RoomMedium.mp3">Room - Medium</option>
-                    <option value="RoomLarge.mp3">Room - Large</option>
-                    <option value="RoomHuge.mp3">Room - Huge</option>
-                    <option value="RoomConcertHall.mp3" selected>Concert Hall</option>
-                    <option value="RoomPool.mp3">Pool / Bathroom</option>
-                    <option value="PlateSmall.mp3">Plate - Small</option>
-                    <option value="PlateMedium.mp3">Plate - Medium</option>
-                    <option value="PlateLarge.mp3">Plate - Large</option>
-                    <option value="PlateSuperDry.mp3">Plate - Super Dry</option>
-                    <option value="PrimeShort.mp3">Prime - Short</option>
-                    <option value="PrimeMed.mp3">Prime - Medium</option>
-                    <option value="PrimeLong.mp3">Prime - Long</option>
-                    <option value="PrimeXtraLong.mp3">Prime - Extra Long</option>
-                    <option value="AirportTerminal.mp3">Airport Terminal</option>
-                    <option value="CastleThunder.mp3">Castle Thunder</option>
-                    <option value="GiantCave.mp3">Giant Cave</option>
-                    <option value="Hangar.mp3">Hangar</option>
-                    <option value="OutdoorBlastoff.mp3">Outdoor - Blastoff</option>
-                    <option value="OutdoorStadium.mp3">Outdoor - Stadium</option>
-                </select>
-            </label>
-            <div class="reverb-mix-container">
-                <label>
-                    Reverb Mix (Wet/Dry):
-                    <span class="reverb-mix-value"><span id="reverbMixValue">25</span>%</span>
+                <label class="field">
+                    <span class="field-label">Form</span>
+                    <select id="formSelect">
+                        <option value="Chorale">Chorale</option>
+                        <option value="Prelude">Prelude</option>
+                        <option value="Fugue">Fugue</option>
+                        <option value="Ritornello">Ritornello</option>
+                        <option value="Variations">Variations</option>
+                        <option value="Suite">Suite</option>
+                    </select>
                 </label>
-                <input type="range" id="reverbMix" min="0" max="100" value="25" step="5">
-            </div>
-        </div>
-        <div class="midi-controls">
-            <h3>🎹 MIDI Output</h3>
-            <label>
-                <input type="checkbox" id="midiEnabledCheck">
-                Enable MIDI Output
-            </label>
-            <div class="midi-device-container">
-                <label>
-                    MIDI Output Device:
-                    <select id="midiOutputSelect">
-                        <option value="">No MIDI devices available</option>
+                <label class="field">
+                    <span class="field-label">Ensemble</span>
+                    <select id="styleSelect">
+                        <option value="Strings">Strings (Quartet)</option>
+                        <option value="Piano">Piano (Solo)</option>
+                        <option value="Woodwinds">Woodwinds (Quartet)</option>
+                        <option value="Brass">Brass (Quartet)</option>
+                        <option value="Choir">Choir (Chorus)</option>
+                        <option value="Harp">Harp (Solo)</option>
+                        <option value="Mixed">Mixed Orchestra</option>
+                    </select>
+                </label>
+                <label class="field">
+                    <span class="field-label">Length</span>
+                    <select id="durationSelect">
+                        <option value="1">Short (~1m)</option>
+                        <option value="3">Medium (~3m)</option>
+                        <option value="5">Long (~5m)</option>
                     </select>
                 </label>
             </div>
-            <div class="midi-voice-controls">
-                <h4>Voice Settings</h4>
-                <div class="voice-control" data-voice="0">
-                    <h5>Soprano</h5>
-                    <div class="control-row">
-                        <label>Channel: <select class="midi-channel-select" data-voice="0">
-                                <option value="1" selected>1</option>
-                                <option value="2">2</option>
-                                <option value="3">3</option>
-                                <option value="4">4</option>
-                                <option value="5">5</option>
-                                <option value="6">6</option>
-                                <option value="7">7</option>
-                                <option value="8">8</option>
-                                <option value="9">9</option>
-                                <option value="10">10</option>
-                                <option value="11">11</option>
-                                <option value="12">12</option>
-                                <option value="13">13</option>
-                                <option value="14">14</option>
-                                <option value="15">15</option>
-                                <option value="16">16</option>
-                            </select></label>
-                        <label>Volume: <input type="range" class="midi-volume-slider" data-voice="0" min="0" max="127"
-                                value="100"> <span class="midi-volume-value">100</span></label>
-                        <label>Pan: <input type="range" class="midi-pan-slider" data-voice="0" min="0" max="127"
-                                value="127"> <span class="midi-pan-value">127</span></label>
-                    </div>
+            <div class="play-row">
+                <button id="playBtn" class="btn-plaque">Generate &amp; Play</button>
+                <button id="kioskBtn" class="btn-quiet" type="button" aria-pressed="false"
+                    title="Endless autoplay: every piece with random settings (Esc to exit)">Kiosk · Perpetuo</button>
+            </div>
+        </section>
+
+        <section id="kioskStage" class="kiosk-stage cartouche" aria-label="Now playing" hidden>
+            <span class="corner tl" aria-hidden="true"><svg><use href="#cornerFlourish" /></svg></span>
+            <span class="corner tr" aria-hidden="true"><svg><use href="#cornerFlourish" /></svg></span>
+            <span class="corner bl" aria-hidden="true"><svg><use href="#cornerFlourish" /></svg></span>
+            <span class="corner br" aria-hidden="true"><svg><use href="#cornerFlourish" /></svg></span>
+
+            <p class="kiosk-kicker">Concerto perpetuo · <span id="kioskCount">No. 1</span></p>
+            <h2 id="kioskTitle" class="kiosk-title" aria-live="polite">—</h2>
+            <p id="kioskSubtitle" class="kiosk-subtitle"></p>
+            <div class="fleuron kiosk-fleuron" aria-hidden="true">❦</div>
+            <p id="kioskDetails" class="kiosk-details"></p>
+            <div id="kioskProgress" class="kiosk-progress" role="progressbar" aria-label="Piece progress"
+                aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+                <span id="kioskProgressFill" class="kiosk-progress-fill"></span>
+            </div>
+            <p class="kiosk-time"><span id="kioskElapsed">0:00</span> / <span id="kioskTotal">–:––</span></p>
+            <p id="kioskState" class="kiosk-state" role="status" aria-live="polite"></p>
+            <p id="kioskSeed" class="kiosk-seed"></p>
+            <div class="kiosk-actions">
+                <button id="kioskExitBtn" class="btn-quiet" type="button">Exit kiosk</button>
+                <small class="hint">or press Esc</small>
+            </div>
+        </section>
+
+        <div id="status" role="status" aria-live="polite">Ready (Click to start audio context)</div>
+
+        <div class="fleuron" aria-hidden="true">❧</div>
+
+        <div class="panels">
+            <div class="reverb-controls">
+                <h3>Expressivity</h3>
+                <label class="stack-label">
+                    Profile (1 per style default):
+                    <select id="expressivityPreset">
+                        <option value="style">Style Default</option>
+                        <option value="delicate">Delicate</option>
+                        <option value="lyrical">Lyrical</option>
+                        <option value="bold">Bold</option>
+                    </select>
+                </label>
+                <label class="check-row">
+                    <input type="checkbox" id="randomTextureCheck" checked>
+                    <span>Pick 1 of 3 textures randomly (space / dynamics / articulation)</span>
+                </label>
+                <label class="check-row">
+                    <input type="checkbox" id="sparseOrnamentsCheck" checked>
+                    <span>Keep ornaments sparse near cadences</span>
+                </label>
+            </div>
+            <div class="reverb-controls">
+                <h3>Ornaments</h3>
+                <div class="reverb-mix-container">
+                    <label>
+                        Ornament Density:
+                        <span class="reverb-mix-value"><span id="ornamentDensityValue">50</span>%</span>
+                    </label>
+                    <input type="range" id="ornamentDensity" min="0" max="100" value="50" step="5"
+                        aria-label="Ornament density">
+                    <small class="hint">Higher = more passing tones, neighbor tones, suspensions</small>
                 </div>
-                <div class="voice-control" data-voice="1">
-                    <h5>Alto</h5>
-                    <div class="control-row">
-                        <label>Channel: <select class="midi-channel-select" data-voice="1">
-                                <option value="1">1</option>
-                                <option value="2" selected>2</option>
-                                <option value="3">3</option>
-                                <option value="4">4</option>
-                                <option value="5">5</option>
-                                <option value="6">6</option>
-                                <option value="7">7</option>
-                                <option value="8">8</option>
-                                <option value="9">9</option>
-                                <option value="10">10</option>
-                                <option value="11">11</option>
-                                <option value="12">12</option>
-                                <option value="13">13</option>
-                                <option value="14">14</option>
-                                <option value="15">15</option>
-                                <option value="16">16</option>
-                            </select></label>
-                        <label>Volume: <input type="range" class="midi-volume-slider" data-voice="1" min="0" max="127"
-                                value="100"> <span class="midi-volume-value">100</span></label>
-                        <label>Pan: <input type="range" class="midi-pan-slider" data-voice="1" min="0" max="127"
-                                value="85"> <span class="midi-pan-value">85</span></label>
-                    </div>
+            </div>
+            <div class="reverb-controls">
+                <h3>Tempo</h3>
+                <div class="reverb-mix-container">
+                    <label>
+                        Beats Per Minute (BPM):
+                        <span class="reverb-mix-value"><span id="tempoValue">120</span> BPM</span>
+                    </label>
+                    <input type="range" id="tempoSlider" min="40" max="200" value="120" step="5"
+                        aria-label="Tempo in beats per minute">
+                    <small class="hint">Adjust playback speed (40–200 BPM)</small>
                 </div>
-                <div class="voice-control" data-voice="2">
-                    <h5>Tenor</h5>
-                    <div class="control-row">
-                        <label>Channel: <select class="midi-channel-select" data-voice="2">
-                                <option value="1">1</option>
-                                <option value="2">2</option>
-                                <option value="3" selected>3</option>
-                                <option value="4">4</option>
-                                <option value="5">5</option>
-                                <option value="6">6</option>
-                                <option value="7">7</option>
-                                <option value="8">8</option>
-                                <option value="9">9</option>
-                                <option value="10">10</option>
-                                <option value="11">11</option>
-                                <option value="12">12</option>
-                                <option value="13">13</option>
-                                <option value="14">14</option>
-                                <option value="15">15</option>
-                                <option value="16">16</option>
-                            </select></label>
-                        <label>Volume: <input type="range" class="midi-volume-slider" data-voice="2" min="0" max="127"
-                                value="100"> <span class="midi-volume-value">100</span></label>
-                        <label>Pan: <input type="range" class="midi-pan-slider" data-voice="2" min="0" max="127"
-                                value="42"> <span class="midi-pan-value">42</span></label>
-                    </div>
-                </div>
-                <div class="voice-control" data-voice="3">
-                    <h5>Bass</h5>
-                    <div class="control-row">
-                        <label>Channel: <select class="midi-channel-select" data-voice="3">
-                                <option value="1">1</option>
-                                <option value="2">2</option>
-                                <option value="3">3</option>
-                                <option value="4" selected>4</option>
-                                <option value="5">5</option>
-                                <option value="6">6</option>
-                                <option value="7">7</option>
-                                <option value="8">8</option>
-                                <option value="9">9</option>
-                                <option value="10">10</option>
-                                <option value="11">11</option>
-                                <option value="12">12</option>
-                                <option value="13">13</option>
-                                <option value="14">14</option>
-                                <option value="15">15</option>
-                                <option value="16">16</option>
-                            </select></label>
-                        <label>Volume: <input type="range" class="midi-volume-slider" data-voice="3" min="0" max="127"
-                                value="100"> <span class="midi-volume-value">100</span></label>
-                        <label>Pan: <input type="range" class="midi-pan-slider" data-voice="3" min="0" max="127"
-                                value="0"> <span class="midi-pan-value">0</span></label>
-                    </div>
-                </div>
-                <div class="midi-auto-pan">
-                    <button id="autoPanBtn">Auto-Pan Voices</button>
+            </div>
+            <div class="reverb-controls">
+                <h3>Reverb</h3>
+                <label>
+                    Impulse Response:
+                    <select id="impulseSelect">
+                        <option value="none">No Reverb</option>
+                        <option value="RoomMedium.mp3">Room - Medium</option>
+                        <option value="RoomLarge.mp3">Room - Large</option>
+                        <option value="RoomHuge.mp3">Room - Huge</option>
+                        <option value="RoomConcertHall.mp3" selected>Concert Hall</option>
+                        <option value="RoomPool.mp3">Pool / Bathroom</option>
+                        <option value="PlateSmall.mp3">Plate - Small</option>
+                        <option value="PlateMedium.mp3">Plate - Medium</option>
+                        <option value="PlateLarge.mp3">Plate - Large</option>
+                        <option value="PlateSuperDry.mp3">Plate - Super Dry</option>
+                        <option value="PrimeShort.mp3">Prime - Short</option>
+                        <option value="PrimeMed.mp3">Prime - Medium</option>
+                        <option value="PrimeLong.mp3">Prime - Long</option>
+                        <option value="PrimeXtraLong.mp3">Prime - Extra Long</option>
+                        <option value="AirportTerminal.mp3">Airport Terminal</option>
+                        <option value="CastleThunder.mp3">Castle Thunder</option>
+                        <option value="GiantCave.mp3">Giant Cave</option>
+                        <option value="Hangar.mp3">Hangar</option>
+                        <option value="OutdoorBlastoff.mp3">Outdoor - Blastoff</option>
+                        <option value="OutdoorStadium.mp3">Outdoor - Stadium</option>
+                    </select>
+                </label>
+                <div class="reverb-mix-container">
+                    <label>
+                        Reverb Mix (Wet/Dry):
+                        <span class="reverb-mix-value"><span id="reverbMixValue">25</span>%</span>
+                    </label>
+                    <input type="range" id="reverbMix" min="0" max="100" value="25" step="5"
+                        aria-label="Reverb mix">
                 </div>
             </div>
         </div>
-        <div class="seed-controls">
-            <label>
-                <input type="checkbox" id="randomizeCheck" checked>
-                Randomize each play (new variation each time)
-            </label>
-            <label>
-                <input type="checkbox" id="useSeedCheck">
-                Use specific seed (reproducible):
-            </label>
-            <input type="text" id="seedInput" placeholder="Enter seed or leave empty for auto-generate" />
-            <div id="seedDisplay">Seed: (will generate on play)</div>
+
+        <div class="fleuron" aria-hidden="true">❦</div>
+
+        <div class="wide-panels">
+            <div class="seed-controls">
+                <h3>Variation &amp; Seed</h3>
+                <label class="check-row">
+                    <input type="checkbox" id="randomizeCheck" checked>
+                    <span>Randomize each play (new variation each time)</span>
+                </label>
+                <label class="check-row">
+                    <input type="checkbox" id="useSeedCheck">
+                    <span>Use specific seed (reproducible):</span>
+                </label>
+                <input type="text" id="seedInput" placeholder="Enter seed or leave empty for auto-generate"
+                    aria-label="Seed" />
+                <div id="seedDisplay">Seed: (will generate on play)</div>
+            </div>
+
+            <div class="midi-controls">
+                <h3>MIDI Output</h3>
+                <label class="check-row">
+                    <input type="checkbox" id="midiEnabledCheck">
+                    <span>Enable MIDI Output</span>
+                </label>
+                <div class="midi-device-container">
+                    <label>
+                        MIDI Output Device:
+                        <select id="midiOutputSelect">
+                            <option value="">No MIDI devices available</option>
+                        </select>
+                    </label>
+                </div>
+                <div class="midi-voice-controls">
+                    <h4>Voice Settings</h4>
+                    <div class="voice-grid">
+                        <div class="voice-control" data-voice="0">
+                            <h5>Soprano</h5>
+                            <div class="control-row">
+                                <label>Channel: <select class="midi-channel-select" data-voice="0">
+                                        <option value="1" selected>1</option>
+                                        <option value="2">2</option>
+                                        <option value="3">3</option>
+                                        <option value="4">4</option>
+                                        <option value="5">5</option>
+                                        <option value="6">6</option>
+                                        <option value="7">7</option>
+                                        <option value="8">8</option>
+                                        <option value="9">9</option>
+                                        <option value="10">10</option>
+                                        <option value="11">11</option>
+                                        <option value="12">12</option>
+                                        <option value="13">13</option>
+                                        <option value="14">14</option>
+                                        <option value="15">15</option>
+                                        <option value="16">16</option>
+                                    </select></label>
+                                <label>Volume: <input type="range" class="midi-volume-slider" data-voice="0" min="0"
+                                        max="127" value="100"> <span class="midi-volume-value">100</span></label>
+                                <label>Pan: <input type="range" class="midi-pan-slider" data-voice="0" min="0"
+                                        max="127" value="127"> <span class="midi-pan-value">127</span></label>
+                            </div>
+                        </div>
+                        <div class="voice-control" data-voice="1">
+                            <h5>Alto</h5>
+                            <div class="control-row">
+                                <label>Channel: <select class="midi-channel-select" data-voice="1">
+                                        <option value="1">1</option>
+                                        <option value="2" selected>2</option>
+                                        <option value="3">3</option>
+                                        <option value="4">4</option>
+                                        <option value="5">5</option>
+                                        <option value="6">6</option>
+                                        <option value="7">7</option>
+                                        <option value="8">8</option>
+                                        <option value="9">9</option>
+                                        <option value="10">10</option>
+                                        <option value="11">11</option>
+                                        <option value="12">12</option>
+                                        <option value="13">13</option>
+                                        <option value="14">14</option>
+                                        <option value="15">15</option>
+                                        <option value="16">16</option>
+                                    </select></label>
+                                <label>Volume: <input type="range" class="midi-volume-slider" data-voice="1" min="0"
+                                        max="127" value="100"> <span class="midi-volume-value">100</span></label>
+                                <label>Pan: <input type="range" class="midi-pan-slider" data-voice="1" min="0"
+                                        max="127" value="85"> <span class="midi-pan-value">85</span></label>
+                            </div>
+                        </div>
+                        <div class="voice-control" data-voice="2">
+                            <h5>Tenor</h5>
+                            <div class="control-row">
+                                <label>Channel: <select class="midi-channel-select" data-voice="2">
+                                        <option value="1">1</option>
+                                        <option value="2">2</option>
+                                        <option value="3" selected>3</option>
+                                        <option value="4">4</option>
+                                        <option value="5">5</option>
+                                        <option value="6">6</option>
+                                        <option value="7">7</option>
+                                        <option value="8">8</option>
+                                        <option value="9">9</option>
+                                        <option value="10">10</option>
+                                        <option value="11">11</option>
+                                        <option value="12">12</option>
+                                        <option value="13">13</option>
+                                        <option value="14">14</option>
+                                        <option value="15">15</option>
+                                        <option value="16">16</option>
+                                    </select></label>
+                                <label>Volume: <input type="range" class="midi-volume-slider" data-voice="2" min="0"
+                                        max="127" value="100"> <span class="midi-volume-value">100</span></label>
+                                <label>Pan: <input type="range" class="midi-pan-slider" data-voice="2" min="0"
+                                        max="127" value="42"> <span class="midi-pan-value">42</span></label>
+                            </div>
+                        </div>
+                        <div class="voice-control" data-voice="3">
+                            <h5>Bass</h5>
+                            <div class="control-row">
+                                <label>Channel: <select class="midi-channel-select" data-voice="3">
+                                        <option value="1">1</option>
+                                        <option value="2">2</option>
+                                        <option value="3">3</option>
+                                        <option value="4" selected>4</option>
+                                        <option value="5">5</option>
+                                        <option value="6">6</option>
+                                        <option value="7">7</option>
+                                        <option value="8">8</option>
+                                        <option value="9">9</option>
+                                        <option value="10">10</option>
+                                        <option value="11">11</option>
+                                        <option value="12">12</option>
+                                        <option value="13">13</option>
+                                        <option value="14">14</option>
+                                        <option value="15">15</option>
+                                        <option value="16">16</option>
+                                    </select></label>
+                                <label>Volume: <input type="range" class="midi-volume-slider" data-voice="3" min="0"
+                                        max="127" value="100"> <span class="midi-volume-value">100</span></label>
+                                <label>Pan: <input type="range" class="midi-pan-slider" data-voice="3" min="0"
+                                        max="127" value="0"> <span class="midi-pan-value">0</span></label>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="midi-auto-pan">
+                        <button id="autoPanBtn" class="btn-quiet">Auto-Pan Voices</button>
+                    </div>
+                </div>
+            </div>
         </div>
-        <div id="status">Ready (Click to start audio context)</div>
+
+        <div class="fleuron" aria-hidden="true">❧</div>
+        <p class="colophon">Fine &middot; Laus Deo</p>
     </div>
     <script src="instrumentConfig.js"></script>
     <script src="sampleLoader.js"></script>
     <script src="midi.js"></script>
     <script src="player.js"></script>
+    <script src="kiosk.js"></script>
 </body>
 
 </html>

@@ -29,11 +29,77 @@ document.addEventListener('DOMContentLoaded', () => {
   let currentStyle = 'Strings';  // Default style
   let currentImpulse = 'RoomConcertHall.mp3';  // Current impulse response file (default: Concert Hall)
   let midiInitialized = false;  // Track if MIDI has been initialized
+  let loadedImpulse = null;     // Impulse file currently loaded into the convolver
+
+  // Playback bookkeeping so a piece can be stopped / superseded cleanly (used by kiosk mode)
+  let playToken = 0;                 // Incremented on every new play and on stop
+  const pendingTimers = new Set();   // setTimeout ids belonging to the current piece
+  const activeMidiNotes = new Map(); // "pitch|voice" -> {pitch, voice} currently sounding via MIDI
+  let resolveFinished = null;        // Resolver of the current piece's `finished` promise
+
+  // ---- Stereo layout ------------------------------------------------------
+  // Default seating [S, A, T, B]: ensembles as on a concert stage (high voices left,
+  // low voices right, bass a little in from the edge); one-instrument styles as heard
+  // from the keyboard (treble right, bass left), narrower.
+  const ENSEMBLE_PANS = [-0.55, -0.2, 0.2, 0.45];
+  const KEYBOARD_PANS = [0.35, 0.12, -0.12, -0.35];
+  const KEYBOARD_STYLES = ['Piano', 'Harp'];
+  let panOverride = null;  // set by setStereoLayout (kiosk); null = style default
+
+  function currentPans(styleName) {
+    if (panOverride) return panOverride;
+    return KEYBOARD_STYLES.includes(styleName) ? KEYBOARD_PANS : ENSEMBLE_PANS;
+  }
+
+  /**
+   * Override the stereo position of the four voices ([S, A, T, B], each -1..1), or
+   * pass null to go back to the style default. Applies to the next piece and, if
+   * samplers are loaded, right away.
+   */
+  function setStereoLayout(pans) {
+    panOverride = Array.isArray(pans) && pans.length === 4
+      ? pans.map(p => Math.max(-1, Math.min(1, Number(p) || 0)))
+      : null;
+    const now = currentPans(currentStyle);
+    panners.forEach((panner, i) => {
+      try { panner.pan.rampTo(now[i], 0.3); } catch (e) { /* disposed */ }
+    });
+  }
+
+  // Just-in-time note scheduler (see generateAndPlay)
+  const SCHEDULE_AHEAD_SECS = 2.0;   // hand notes to Tone/MIDI this far ahead of their onset
+  const SCHEDULER_TICK_MS = 100;     // how often the scheduler tops up (background tabs: ~1/s, still inside the window)
+  let schedulerId = null;
+
+  function clearScheduler() {
+    if (schedulerId !== null) {
+      clearInterval(schedulerId);
+      schedulerId = null;
+    }
+  }
+
+  function later(fn, ms) {
+    const id = setTimeout(() => {
+      pendingTimers.delete(id);
+      fn();
+    }, ms);
+    pendingTimers.add(id);
+    return id;
+  }
 
   /**
    * Properly dispose all audio resources (samplers, volumes, panners)
    */
   function disposeAllAudioResources() {
+    clearScheduler();
+
+    // Stop sounding/pending sources first: dispose alone only disconnects them, the
+    // native buffer sources would stay scheduled until their own end.
+    const now = Tone.now();
+    samplers.forEach(s => {
+      try { if (s && typeof s.releaseAll === 'function') s.releaseAll(now); } catch (e) { /* ignore */ }
+    });
+
     // Dispose samplers
     if (samplers.length > 0) {
       disposeSamplers(samplers);
@@ -196,27 +262,38 @@ document.addEventListener('DOMContentLoaded', () => {
       console.log(`Impulse changed to: ${currentImpulse}`);
 
       // If convolver is already initialized, load the new impulse
-      if (convolver) {
-        if (currentImpulse === 'none') {
-          // Disable reverb by setting wet gain to 0
-          if (reverbGain) reverbGain.gain.value = 0;
-          if (dryGain) dryGain.gain.value = 1;
-          console.log("✓ Reverb disabled");
-        } else {
-          try {
-            await convolver.load(`impulses/${currentImpulse}`);
-            console.log(`✓ Impulse response loaded: ${currentImpulse}`);
-            // Restore mix level when changing impulse
-            const reverbMixSlider = document.getElementById('reverbMix');
-            if (reverbMixSlider) {
-              updateReverbMix(parseInt(reverbMixSlider.value));
-            }
-          } catch (error) {
-            console.error(`Error loading impulse: ${error.message}`);
-          }
-        }
+      try {
+        await applyImpulse();
+      } catch (error) {
+        console.error(`Error loading impulse: ${error.message}`);
       }
     });
+  }
+
+  /**
+   * Make the convolver match `currentImpulse` (loads the file once) and apply the mix.
+   * No-op until initAudio() has created the convolver.
+   */
+  async function applyImpulse() {
+    if (!convolver) return;
+    if (currentImpulse === 'none') {
+      // Disable reverb by setting wet gain to 0
+      if (reverbGain) reverbGain.gain.value = 0;
+      if (dryGain) dryGain.gain.value = 1;
+      console.log("✓ Reverb disabled");
+      return;
+    }
+    if (loadedImpulse !== currentImpulse) {
+      const target = currentImpulse;
+      await convolver.load(`impulses/${target}`);
+      loadedImpulse = target;
+      console.log(`✓ Impulse response loaded: ${target}`);
+    }
+    // Restore mix level when changing impulse
+    const reverbMixSlider = document.getElementById('reverbMix');
+    if (reverbMixSlider) {
+      updateReverbMix(parseInt(reverbMixSlider.value));
+    }
   }
 
   // Handle ornament density slider
@@ -313,12 +390,9 @@ document.addEventListener('DOMContentLoaded', () => {
       disposeAllAudioResources();
     }
 
-    // Panning setup for stereo placement
-    // Soprano (0): Right (0.4)
-    // Alto (1): Center-Right (0.15)
-    // Tenor (2): Center-Left (-0.15)
-    // Bass (3): Left (-0.4)
-    const pans = [0.4, 0.15, -0.15, -0.4];
+    // Stereo placement per voice [S, A, T, B] (-1 = left, +1 = right). Tone.Panner
+    // folds each (stereo) sample to mono first, so these are real positions.
+    const pans = currentPans(styleName);
 
     statusDiv.innerText = `Loading samples for ${STYLE_PRESETS[styleName].displayName}...`;
     console.log(`Setting up samplers for style: ${styleName}`);
@@ -354,8 +428,46 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  /**
+   * Stop whatever is playing right now: cancel pending timers, silence MIDI notes,
+   * dispose samplers (which also drops their scheduled sources) and settle `finished`.
+   */
+  function stopPlayback() {
+    playToken++;
+    clearScheduler();
+    pendingTimers.forEach(id => clearTimeout(id));
+    pendingTimers.clear();
+
+    activeMidiNotes.forEach(({ pitch, voice }) => {
+      try { noteOff(pitch, voice); } catch (e) { /* ignore */ }
+    });
+    activeMidiNotes.clear();
+
+    if (samplers.length > 0 || volumes.length > 0 || panners.length > 0) {
+      disposeAllAudioResources();
+    }
+
+    if (resolveFinished) {
+      const resolve = resolveFinished;
+      resolveFinished = null;
+      resolve(false);
+    }
+
+    statusDiv.innerText = "Stopped";
+    playBtn.disabled = false;
+  }
+
+  /**
+   * Generate a piece from the current DOM settings and play it.
+   * Resolves once playback is scheduled with
+   *   { ok: true, data, durationSecs, finished }  — `finished` resolves true at the natural end
+   *                                                 (last note + 3 s tail), false if stopped;
+   *   { ok: false, error } on failure, or { ok: false, aborted: true } if superseded by stop/new play.
+   */
   async function generateAndPlay() {
     console.log("Generate button clicked");
+    const token = ++playToken;
+    const superseded = () => token !== playToken;
     statusDiv.innerText = "Initializing audio...";
     playBtn.disabled = true;
 
@@ -366,12 +478,19 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!useMidi) {
         // Initialize audio context only if not using MIDI
         await initAudio();
+        try {
+          await applyImpulse();
+        } catch (error) {
+          console.error(`Error loading impulse: ${error.message}`);
+        }
+        if (superseded()) return { ok: false, aborted: true };
 
         // Load samplers for selected style
         const samplerSetupSuccess = await setupSamplers(currentStyle);
+        if (superseded()) return { ok: false, aborted: true };
         if (!samplerSetupSuccess) {
           playBtn.disabled = false;
-          return;
+          return { ok: false, error: new Error(`Could not load samples for ${currentStyle}`) };
         }
       } else {
         // Dispose any existing samplers if switching to MIDI mode
@@ -414,6 +533,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!response.ok) throw new Error("Server error");
 
       const data = await response.json();
+      if (superseded()) return { ok: false, aborted: true };
       console.log("Data received:", data);
       console.log("Total notes:", data.notes.length);
 
@@ -426,7 +546,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 <strong>Expressivity:</strong> ${expressivityPreset} | Random texture: ${randomTexture ? 'on' : 'off'} | Sparse cadences: ${sparseOrnaments ? 'on' : 'off'}
             `;
 
-      const now = Tone.now() + 0.5;
+      const useMidiOut = isMidiEnabled();
+      // Time base: the audio clock for Tone playback; the wall clock for MIDI (the
+      // AudioContext is never started in MIDI mode, so its clock may be frozen).
+      const clock = useMidiOut ? () => performance.now() / 1000 : () => Tone.now();
+      const start = clock() + 0.5;
       // Get tempo from slider (default 120 BPM)
       const tempoSlider = document.getElementById('tempoSlider');
       const bpm = tempoSlider ? parseInt(tempoSlider.value) : 120;
@@ -440,69 +564,94 @@ document.addEventListener('DOMContentLoaded', () => {
       const bpmScaleFactor = 120 / bpm;  // Scale factor relative to 120 BPM baseline
       const beatDuration = 0.5;  // Baseline: 0.5 seconds per quarter note at 120 BPM
 
-      data.notes.forEach(note => {
+      // Exact length in beats (new generator sends `beats`; fall back to the note name)
+      const BEATS_BY_NAME = { '1n': 4, '2n.': 3, '2n': 2, '4n.': 1.5, '4n': 1, '8n.': 0.75, '8n': 0.5, '16n': 0.25, '32n': 0.125 };
+      const beatsOf = (n) => n.beats || BEATS_BY_NAME[n.duration] || 2;
+
+      // Precompute every note (offset from `start`, length, dynamics), sorted by onset
+      const events = data.notes.map(note => {
         const humanizeStart = (Math.random() * 0.02) - 0.01;
         const humanizeDuration = (Math.random() * 0.05);
-        const time = now + (note.startTime * beatDuration * bpmScaleFactor) + humanizeStart;
+        const at = (note.startTime * beatDuration * bpmScaleFactor) + humanizeStart;
+        const dur = (beatsOf(note) * beatDuration * bpmScaleFactor) - 0.02 + humanizeDuration;
 
-        let noteBeats = 2;
-        if (note.duration === "4n") noteBeats = 1;
-        if (note.duration === "8n") noteBeats = 0.5;
-        if (note.duration === "16n") noteBeats = 0.25;
-        if (note.duration === "32n") noteBeats = 0.125;
-        if (note.duration === "4n.") noteBeats = 1.5;  // Dotted quarter
-        if (note.duration === "8n.") noteBeats = 0.75;  // Dotted eighth
+        // Velocity for dynamics: use the generator's phrase-shaped velocity when present
+        let velocity = note.velocity ? note.velocity / 127 : 0.7 + (Math.random() * 0.1);
+        velocity = Math.max(0.2, Math.min(1, velocity));
 
-        const durationSecs = (noteBeats * beatDuration) - 0.02 + humanizeDuration;
+        return {
+          at,
+          dur: Math.max(0.03, dur),
+          pitch: note.pitch,
+          voice: Math.min(Math.max(note.voice, 0), 3),
+          midiVelocity: Math.round(velocity * 127),
+          // Per-note gain with a squared curve (40·log10(v), the usual MIDI/DLS
+          // velocity curve): v=0.55 → -10 dB, v=0.8 → -4 dB, v=1 → 0 dB.
+          // Tone applies it as a linear gain on the note's own buffer source.
+          gain: velocity * velocity,
+        };
+      }).sort((a, b) => a.at - b.at);
 
-        // Velocity for dynamics
-        let velocity = 0.7 + (Math.random() * 0.1);
-        if (note.voice === 3) velocity = 0.8;  // Bass slightly louder
-        if (note.voice === 0) velocity = 0.8;  // Soprano slightly louder
-
-        // Convert velocity to decibels for volume control
-        const volumeDb = velocityToDb(velocity);
-
-        // Trigger the correct sampler based on voice index
-        const voiceIndex = Math.min(Math.max(note.voice, 0), 3);
-
-        // Check if MIDI output is enabled
-        if (isMidiEnabled()) {
-          // Schedule MIDI on/off so notes respect their start times
-          const delayMs = Math.max(0, (time - Tone.now()) * 1000);
-          setTimeout(() => {
-            noteOn(note.pitch, Math.round(velocity * 127), voiceIndex);
-            setTimeout(() => {
-              noteOff(note.pitch, voiceIndex);
-            }, durationSecs * 1000);
-          }, delayMs);
-        } else {
-          // Use Tone.js sampler
-          // Set volume for this note
-          volumes[voiceIndex].volume.value = volumeDb;
-
-          // Trigger the note - works for both Tone.Sampler and Tone.PolySynth
-          samplers[voiceIndex].triggerAttackRelease(note.pitch, durationSecs, time, velocity);
+      // Just-in-time scheduling: only notes starting within SCHEDULE_AHEAD_SECS are
+      // handed to Tone / MIDI. Scheduling a whole piece up front created thousands of
+      // buffer sources at once, and a stopped piece left them all pending, which
+      // saturated the audio thread (clock running at ~0.1x, pieces "playing" silently).
+      clearScheduler();
+      let next = 0;
+      const pump = () => {
+        if (superseded()) { clearScheduler(); return; }
+        const horizon = clock() + SCHEDULE_AHEAD_SECS;
+        while (next < events.length && start + events[next].at <= horizon) {
+          const ev = events[next++];
+          const time = start + ev.at;
+          try {
+            if (useMidiOut) {
+              const midiKey = `${ev.pitch}|${ev.voice}`;
+              later(() => {
+                noteOn(ev.pitch, ev.midiVelocity, ev.voice);
+                activeMidiNotes.set(midiKey, { pitch: ev.pitch, voice: ev.voice });
+                later(() => {
+                  noteOff(ev.pitch, ev.voice);
+                  activeMidiNotes.delete(midiKey);
+                }, ev.dur * 1000);
+              }, Math.max(0, (time - clock()) * 1000));
+            } else if (samplers[ev.voice]) {
+              // Works for both Tone.Sampler and Tone.PolySynth. A late tick plays the
+              // note slightly late instead of dropping it.
+              samplers[ev.voice].triggerAttackRelease(ev.pitch, ev.dur, Math.max(time, Tone.now()), ev.gain);
+            }
+          } catch (err) {
+            console.warn(`Skipping note ${ev.pitch} (voice ${ev.voice}): ${err.message}`);
+          }
         }
-      });
+        if (next >= events.length) clearScheduler();
+      };
+      schedulerId = setInterval(pump, SCHEDULER_TICK_MS);
+      pump();
 
-      const lastNote = data.notes[data.notes.length - 1];
-      const lastNoteBeats = lastNote.duration === "32n" ? 0.125 :
-        lastNote.duration === "16n" ? 0.25 :
-          lastNote.duration === "8n" ? 0.5 :
-            lastNote.duration === "4n" ? 1 :
-              lastNote.duration === "4n." ? 1.5 : 2;
-      const durationSecs = (lastNote.startTime * beatDuration) + (lastNoteBeats * beatDuration) + 3;
+      const endBeats = data.notes.reduce((m, n) => Math.max(m, n.startTime + beatsOf(n)), 0);
+      const durationSecs = (endBeats * beatDuration * bpmScaleFactor) + 3;
 
-      setTimeout(() => {
+      if (resolveFinished) resolveFinished(false);  // settle a previous piece's promise, if any
+      let settle;
+      const finished = new Promise(resolve => { settle = resolve; });
+      resolveFinished = settle;
+      later(() => {
+        if (resolveFinished === settle) resolveFinished = null;
+        settle(true);
+        if (superseded()) return;  // a newer piece owns the UI now
         statusDiv.innerText = "Ready";
         playBtn.disabled = false;
       }, durationSecs * 1000);
 
+      return { ok: true, data, durationSecs, finished };
+
     } catch (e) {
       console.error(e);
+      if (superseded()) return { ok: false, aborted: true };
       statusDiv.innerText = "Error: " + e.message;
       playBtn.disabled = false;
+      return { ok: false, error: e };
     }
   }
 
@@ -511,4 +660,12 @@ document.addEventListener('DOMContentLoaded', () => {
     generateAndPlay();
   });
   console.log("Event listener added to playBtn");
+
+  // Small public surface for kiosk.js (endless autoplay)
+  window.BachPlayer = {
+    generateAndPlay,
+    stopPlayback,
+    setStereoLayout,
+    isMidiEnabled: () => (typeof isMidiEnabled === 'function' ? isMidiEnabled() : false),
+  };
 });

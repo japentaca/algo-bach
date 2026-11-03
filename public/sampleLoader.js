@@ -117,22 +117,6 @@ async function loadStyleSamplers(styleName, monoModes = [false, false, false, fa
 }
 
 /**
- * Convert velocity (0-1) to decibels using a logarithmic curve
- * Maps 0 (silence) to -24dB and 1 (normal) to 0dB
- * @param {number} velocity - Velocity value 0-1
- * @returns {number} Volume in decibels
- */
-function velocityToDb(velocity) {
-  if (velocity <= 0) return -Infinity;
-  if (velocity >= 1) return 0;
-
-  // Logarithmic curve: quieter at low velocities, more linear at higher
-  // Formula: dB = 20 * log10(velocity)
-  // Scaled to map 0.1 → -20dB, 1.0 → 0dB
-  return 20 * Math.log10(velocity);
-}
-
-/**
  * Dispose of samplers to free memory
  * Handles cleanup of audio buffers and resources
  * @param {Array<Tone.Sampler>} samplers - Array of samplers to dispose
