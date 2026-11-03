@@ -16,8 +16,9 @@ const chorale = generatePiece({
 console.log(`Form: ${chorale.meta.form}`);
 console.log(`Phrase Structure: ${chorale.meta.phraseMarkers ? 'Yes' : 'No'}`);
 if (chorale.meta.phraseMarkers) {
-  console.log(`  Antecedent: measures ${chorale.meta.phraseMarkers.antecedent.start}-${chorale.meta.phraseMarkers.antecedent.end} (${chorale.meta.phraseMarkers.antecedent.cadence})`);
-  console.log(`  Consequent: measures ${chorale.meta.phraseMarkers.consequent.start}-${chorale.meta.phraseMarkers.consequent.end} (${chorale.meta.phraseMarkers.consequent.cadence})`);
+  chorale.meta.phraseMarkers.forEach(p => {
+    console.log(`  Phrase ${p.index + 1}: beats ${p.startBeat}-${p.endBeat} in ${p.key} ${p.mode} (${p.cadence})`);
+  });
 }
 
 // Count voice interaction types

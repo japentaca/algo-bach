@@ -66,7 +66,10 @@ test('Generate A minor prelude', () => {
 test('Check minor cadence structure', () => {
   const prog = Progressions.generate('D', 6, 'test', 'minor');
   const lastThree = prog.progression.slice(-3);
-  if (lastThree[0].numeral !== 'i' || lastThree[0].inversion !== 2) throw new Error('Missing i64');
+  // Either cadential 6/4 (i6/4 - V - i) or Phrygian approach (iv6 - V - i)
+  const cad64 = lastThree[0].numeral === 'i' && lastThree[0].inversion === 2;
+  const phrygian = lastThree[0].numeral === 'iv' && lastThree[0].inversion === 1;
+  if (!cad64 && !phrygian) throw new Error('Missing i64 / iv6 pre-dominant');
   if (lastThree[1].numeral !== 'V') throw new Error('Missing V in minor');
   if (lastThree[2].numeral !== 'i') throw new Error('Missing i resolution');
 });
@@ -143,7 +146,8 @@ test('Passing tones generation', () => {
     { pitch: 'C5', duration: '2n', startTime: 0, voice: 0 },
     { pitch: 'E5', duration: '2n', startTime: 2, voice: 0 }
   ];
-  const ornamental = Melodic.addPassingTones(notes, 'C');
+  // density 100% so the test is deterministic (the default is probabilistic)
+  const ornamental = Melodic.addPassingTones(notes, 'C', 'major', { baseDensity: 1, voiceMultipliers: [1, 1, 1, 1], totalMeasures: 30, cadenceMeasures: 0 });
   if (ornamental.length === notes.length) throw new Error('No passing tones added');
 });
 

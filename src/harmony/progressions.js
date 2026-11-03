@@ -1,5 +1,9 @@
-const { Progression, Note } = require('tonal');
+const { Note } = require('tonal');
 const seedrandom = require('seedrandom');
+const Chords = require('../theory/chords');
+
+/** Chord symbol for a numeral (tonal's fromRomanNumerals ignores case: ii -> D major). */
+const chordName = (key, numeral, mode = 'major') => Chords.realizeNumeral(numeral, key, mode).name;
 
 /**
  * Functional Harmony Engine
@@ -157,7 +161,7 @@ const Progressions = {
    * @param {number} position - Position in form (0=beginning, 1=middle, 2=end)
    * @returns {array} Cadence progression
    */
-  selectCadence: (mode = 'major', position = 2) => {
+  selectCadence: (mode = 'major', position = 2, rng = Math.random) => {
     // For minor mode, adapt cadences
     if (mode === 'minor') {
       const CADENCE_MINOR = {
@@ -185,20 +189,20 @@ const Progressions = {
 
       // Choose based on position: half cadence at middle, PAC at end
       if (position === 1) return CADENCE_MINOR.HC;
-      if (position === 2) return Math.random() > 0.5 ? CADENCE_MINOR.PAC : CADENCE_MINOR.PC;
+      if (position === 2) return rng() > 0.5 ? CADENCE_MINOR.PAC : CADENCE_MINOR.PC;
       return CADENCE_MINOR.PAC;
     }
 
     // For major mode
     if (position === 1) {
       // Middle position: half cadence or deceptive allowed
-      const rand = Math.random();
+      const rand = rng();
       if (rand < 0.7) return CADENCE_TYPES.HC;
       return CADENCE_TYPES.DC;  // Deceptive cadence only in middle, never at end
     }
     if (position === 2) {
       // FINAL position: MUST resolve to tonic (never deceptive)
-      const rand = Math.random();
+      const rand = rng();
       if (rand < 0.7) return CADENCE_TYPES.PAC;  // Perfect Authentic preferred
       return CADENCE_TYPES.IAC;  // Imperfect Authentic also resolves to I
     }
@@ -285,8 +289,13 @@ const Progressions = {
     let cadence;
     if (cadenceType && CADENCE_TYPES[cadenceType]) {
       cadence = CADENCE_TYPES[cadenceType];
+      if (mode === 'minor') {
+        // translate major-mode cadence numerals to the minor mode
+        const toMinor = { I: 'i', IV: 'iv', vi: 'VI', ii: 'ii°' };
+        cadence = cadence.map(c => ({ ...c, numeral: toMinor[c.numeral] || c.numeral }));
+      }
     } else {
-      cadence = Progressions.selectCadence(mode, 2); // position 2 = end
+      cadence = Progressions.selectCadence(mode, 2, rng); // position 2 = end
     }
 
     // Add cadence chords to progression
@@ -296,9 +305,8 @@ const Progressions = {
 
     // Convert numerals to real chord names
     const chords = progression.map(p => {
-      const chordName = Progression.fromRomanNumerals(key, [p.numeral])[0];
       return {
-        name: chordName,
+        name: chordName(key, p.numeral, mode),
         inversion: p.inversion,
         numeral: p.numeral,
         seventh: p.numeral.includes('7') ? true : false
@@ -318,10 +326,10 @@ const Progressions = {
    * @param {string} mode - 'major' or 'minor'
    * @returns {array} Final cadence progression (guaranteed to end on I/i)
    */
-  getFinalCadence: (mode = 'major') => {
+  getFinalCadence: (mode = 'major', rng = Math.random) => {
     if (mode === 'minor') {
       // Minor: iv - V - i (or ii°6 - V - i for more color)
-      const rand = Math.random();
+      const rand = rng();
       if (rand < 0.6) {
         return [
           { numeral: 'iv', inversion: 0 },
@@ -338,7 +346,7 @@ const Progressions = {
       }
     }
     // Major: IV - V - I or I6/4 - V - I
-    const rand = Math.random();
+    const rand = rng();
     if (rand < 0.5) {
       return [
         { numeral: 'IV', inversion: 0 },
@@ -387,7 +395,7 @@ const Progressions = {
           'IV': 'iv', 'iv': 'iv',
           'V': 'V', 'v': 'V',
           'VI': 'VI', 'vi': 'VI',
-          'VII': 'vii°', 'vii°': 'vii°'
+          'VII': 'VII', 'vii°': 'VII' // natural subtonic in minor-mode sequences
         };
         // Handle inversions (e.g., "V6" -> "V6")
         const baseNumeral = numeral.replace(/[0-9]/g, '');
@@ -415,9 +423,8 @@ const Progressions = {
         cleanNumeral = numeral.replace('6', '');
       }
 
-      const chordName = Progression.fromRomanNumerals(key, [cleanNumeral])[0];
       return {
-        name: chordName,
+        name: chordName(key, cleanNumeral, mode),
         inversion: inv,
         numeral: cleanNumeral,
         seventh: cleanNumeral.includes('7')
