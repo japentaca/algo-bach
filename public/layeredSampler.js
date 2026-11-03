@@ -91,6 +91,45 @@
     return secs;
   }
 
+  // ---- Round robins: level of each take ------------------------------------------
+  // The catalog's gain was measured on the main take; another take of the same note
+  // can be louder or softer. Each take is matched to the main one by its peak RMS
+  // over 100 ms (the measure the articulation levels were calibrated with). A take
+  // more than 6 dB away was really played at another dynamic (VSCO pizz: 8 of 70
+  // pairs, up to 13 dB): its timbre would not match even at the same level, so it is
+  // left out of the round robin.
+  const levelCache = new WeakMap();  // AudioBuffer -> peak 100 ms RMS (first 2 s)
+  const TAKE_MATCH_LIMIT = 2;        // takes within ±6 dB of the main one are used
+  let roundRobinsOn = true;          // off only for A/B checks (setRoundRobins)
+
+  function peakRms(buffer) {
+    if (levelCache.has(buffer)) return levelCache.get(buffer);
+    // Measured on the mono sum: the player's panners fold each sample to mono, and the
+    // stereo section takes differ more per channel than in the sum
+    const left = buffer.getChannelData(0);
+    const right = buffer.numberOfChannels > 1 ? buffer.getChannelData(1) : left;
+    const block = Math.max(1, Math.round(buffer.sampleRate * 0.01));
+    const limit = Math.min(left.length, Math.round(buffer.sampleRate * 2));
+    const sums = [];
+    for (let i = 0; i + block <= limit; i += block) {
+      let s = 0;
+      for (let j = i; j < i + block; j++) {
+        const m = (left[j] + right[j]) * 0.5;
+        s += m * m;
+      }
+      sums.push(s);
+    }
+    let peak = 0;
+    for (let k = 0; k < sums.length; k++) {
+      let s = 0;
+      const n = Math.min(10, sums.length - k);
+      for (let j = 0; j < n; j++) s += sums[k + j];
+      peak = Math.max(peak, Math.sqrt(s / (n * block)));
+    }
+    levelCache.set(buffer, peak);
+    return peak;
+  }
+
   // ---- Articulation maps (fetched once per instrument/articulation) -------------
   const articulationCache = new Map();
 
@@ -140,6 +179,9 @@
       this.layerSpread = opts.layerSpread ?? 1.9;
       this.natural = !!opts.natural;
       this.buffers = new Map();   // path -> AudioBuffer (files prepared for this sampler)
+      this.rr = new Map();        // main path -> { takes: [paths], next } (round robins in use)
+      this.takeGain = new Map();  // alternate take path -> linear level match to the main take
+      this.rrCounts = {};         // take index -> notes played (for checks)
       this.active = new Set();    // { source, gain } of sounding / scheduled notes
       this.disposed = false;
 
@@ -197,12 +239,22 @@
      */
     async prepare(notes) {
       const paths = new Set();
+      const rrSamples = new Map();  // main path -> sample entry, for the round robins
       if (notes && notes.length) {
-        for (const n of notes) {
+        // In time order, to find the notes played again right after themselves
+        const ordered = notes.map((n, i) => ({ n, i }))
+          .sort((a, b) => ((a.n.startTime ?? a.i) - (b.n.startTime ?? b.i)) || (a.i - b.i));
+        let prev = null;
+        for (const { n } of ordered) {
           const midi = noteToMidi(n.pitch);
           if (midi === null) continue;
           const s = this.sampleFor(midi, n.velocity ?? 90);
-          if (s) paths.add(s.path);
+          if (!s) continue;
+          paths.add(s.path);
+          // Round robins where the same recording would be heard twice in a row:
+          // every short (natural) sample, and repeated notes of sustained ones
+          if (roundRobinsOn && s.alts && s.alts.length && (this.natural || (prev && prev.path === s.path))) rrSamples.set(s.path, s);
+          prev = s;
         }
       } else {
         for (const z of this.zones.values()) {
@@ -210,12 +262,48 @@
           if (z.layers) z.layers.forEach(l => paths.add(l.path));
         }
       }
-      await Promise.all([...paths].map(async p => {
+      const altPaths = new Set();
+      rrSamples.forEach(s => s.alts.forEach(a => { if (!paths.has(a)) altPaths.add(a); }));
+      const load = async p => {
         const buf = await loadBuffer(this.baseUrl + p.split('/').map(encodeURIComponent).join('/'));
         this.buffers.set(p, buf);
         if (!this.natural) attackOffset(buf);  // measured now, not while scheduling
-      }));
-      return paths.size;
+        return buf;
+      };
+      await Promise.all([...paths].map(load));
+      // A missing alternate take only costs its round robin, never the note
+      await Promise.all([...altPaths].map(p => load(p).catch(err => {
+        console.warn(`VSCO round robin unavailable (${p}): ${err.message}`);
+      })));
+      rrSamples.forEach((s, main) => {
+        const mainBuf = this.buffers.get(main);
+        const takes = [main];
+        for (const a of s.alts) {
+          const buf = this.buffers.get(a);
+          if (!buf) continue;
+          const ref = peakRms(mainBuf);
+          const lvl = peakRms(buf);
+          const match = ref > 0 && lvl > 0 ? ref / lvl : 0;
+          if (!(match >= 1 / TAKE_MATCH_LIMIT && match <= TAKE_MATCH_LIMIT)) {
+            this.rejectedTakes = (this.rejectedTakes || 0) + 1;
+            continue;
+          }
+          this.takeGain.set(a, match);
+          takes.push(a);
+        }
+        if (takes.length > 1) this.rr.set(main, { takes, next: 0 });
+      });
+      return paths.size + altPaths.size;
+    }
+
+    /** The take (path) to play for a catalog sample: alternates the round robins in use. */
+    takeFor(sample) {
+      const rr = this.rr.get(sample.path);
+      if (!rr) return sample.path;
+      const i = rr.next;
+      rr.next = (i + 1) % rr.takes.length;
+      this.rrCounts[i] = (this.rrCounts[i] || 0) + 1;
+      return rr.takes[i];
     }
 
     /**
@@ -232,12 +320,15 @@
       const midi = noteToMidi(pitch);
       if (midi === null) throw new Error(`Bad pitch ${pitch}`);
       const sample = this.sampleFor(midi, velocity);
-      const buffer = sample && this.buffers.get(sample.path);
+      if (!sample) return;
+      const take = this.takeFor(sample);
+      const buffer = this.buffers.get(take);
       if (!buffer) return;  // not prepared (should not happen): skip rather than stall
 
       const raw = Tone.getContext().rawContext;
       const start = Math.max(time, raw.currentTime);
-      const level = gain * this.trim * (sample.gain ? Math.pow(10, sample.gain / 20) : 1);
+      const level = gain * this.trim * (sample.gain ? Math.pow(10, sample.gain / 20) : 1)
+        * (this.takeGain.get(take) ?? 1);
       const rate = Math.pow(2, (midi - (sample.root ?? midi)) / 12);
       // Short articulations sound their own recorded length (attack, decay and room)
       const slur = !!(phrasing && phrasing.slur) && !this.natural;
@@ -302,6 +393,7 @@
       // Let the short fade finish before cutting the output
       setTimeout(() => this.disconnect(), 250);
       this.buffers.clear();
+      this.rr.clear();
       return this;
     }
   }
@@ -460,6 +552,21 @@
       this.samplers.forEach(s => s.releaseAll(time));
     }
 
+    /** Round robins per articulation: { key: { samples, takes: {index: notes}, gainsDb } } (for checks). */
+    roundRobinStats() {
+      const out = {};
+      this.samplers.forEach((s, k) => {
+        if (!s.rr.size && !Object.keys(s.rrCounts).length && !s.rejectedTakes) return;
+        out[k] = {
+          samples: s.rr.size,
+          rejected: s.rejectedTakes || 0,
+          takes: { ...s.rrCounts },
+          gainsDb: [...s.takeGain.values()].map(g => Math.round(200 * Math.log10(g)) / 10),
+        };
+      });
+      return out;
+    }
+
     connect(destination) {
       Tone.connect(this.output, destination);
       return this;
@@ -500,6 +607,7 @@
   window.styleArticulations = styleArticulations;
   window.shortArticulationLength = shortLength;
   window.sampleAttackOffset = attackOffset;  // for checks
+  window.setRoundRobins = on => { roundRobinsOn = !!on; };  // for A/B checks (next piece)
   window.createLayeredStyleSamplers = createLayeredStyleSamplers;
   window.isVscoAvailable = isVscoAvailable;
   window.noteToMidi = noteToMidi;

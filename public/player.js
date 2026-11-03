@@ -741,5 +741,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // played per resolved articulation (VSCO styles)
     lastArticulationPlan: () => lastArticulationPlan,
     articulationStats: () => samplers.map(s => (s && s.counts ? { ...s.counts } : null)),
+    // Round robins in use per voice and articulation (take index -> notes played)
+    roundRobinStats: () => samplers.map(s => (s && s.roundRobinStats ? s.roundRobinStats() : null)),
   };
 });

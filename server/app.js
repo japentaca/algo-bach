@@ -35,6 +35,34 @@ app.get('/api/vsco/status', (req, res) => {
   res.json({ available: !!getVscoCatalog() });
 });
 
+// Round robins: the catalog points to ONE file per note and layer, but VSCO often
+// recorded each note twice or more ("_rr1"/"_rr2", "_RR1"/"_RR2", "_1"/"_2"). The
+// other takes that really exist on disk are listed as `alts`, so the player can
+// alternate them on repeated notes.
+const RR_SUFFIX = /(_rr|_RR|_)(\d)(\.\w+)$/;
+const RR_MAX = 4;
+const altsCache = new Map();  // sample path -> [other takes]
+
+function roundRobinAlts(samplePath) {
+  if (altsCache.has(samplePath)) return altsCache.get(samplePath);
+  const alts = [];
+  if (RR_SUFFIX.test(samplePath)) {
+    for (let d = 1; d <= RR_MAX; d++) {
+      const alt = samplePath.replace(RR_SUFFIX, (m, pre, n, ext) => `${pre}${d}${ext}`);
+      if (alt !== samplePath && fs.existsSync(path.join(SOUNDFONTS_DIR, VSCO_NAME, alt))) alts.push(alt);
+    }
+  }
+  altsCache.set(samplePath, alts);
+  return alts;
+}
+
+/** Copy of a catalog sample entry with its round-robin `alts` (when there are any). */
+function withAlts(sample) {
+  if (!sample || !sample.path) return sample;
+  const alts = roundRobinAlts(sample.path);
+  return alts.length ? { ...sample, alts } : sample;
+}
+
 // Sample map + velocity layers of one articulation: ?instrument=&articulation=
 app.get('/api/vsco/articulation', (req, res) => {
   const catalog = getVscoCatalog();
@@ -44,10 +72,14 @@ app.get('/api/vsco/articulation', (req, res) => {
     ? catalog.instruments[instrument] : null;
   const art = inst && inst.articulations.find(a => a.name === articulation);
   if (!art) return res.status(404).json({ error: 'not_found' });
+  const samples = {};
+  for (const [note, s] of Object.entries(art.samples)) samples[note] = withAlts(s);
+  const velocity = {};
+  for (const [note, layers] of Object.entries(art.velocity || {})) velocity[note] = layers.map(withAlts);
   res.json({
     baseUrl: `soundfonts/${encodeURIComponent(VSCO_NAME)}/`,
-    samples: art.samples,
-    velocity: art.velocity || {},
+    samples,
+    velocity,
   });
 });
 

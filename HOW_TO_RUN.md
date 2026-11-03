@@ -36,6 +36,17 @@ Then open: `http://localhost:3000`
 API endpoints:
 - `GET /api/generate?form=Chorale&mode=major&key=C&duration=4`
 - `GET /api/generate?form=Prelude&mode=minor&key=D&duration=2`
+- `GET /api/vsco/status` → `{ available }` (VSCO 2 CE samples found in carrilion's soundfonts)
+- `GET /api/vsco/articulation?instrument=Violin&articulation=Spiccato` → sample map and
+  velocity layers of one articulation. Each sample/layer may carry `alts`: the other
+  round-robin takes of that note found on disk (`_rr1/_rr2`, `_RR1/_RR2`, `_1/_2`).
+
+The player alternates those takes on every short (staccato/pizzicato) sample and on
+repeated notes of sustained ones, matching each take's level to the main one (peak
+100 ms RMS of the mono sum); takes more than 6 dB away are another dynamic and are not
+used. Checks in the browser console: `BachPlayer.roundRobinStats()` (takes played per
+voice and articulation), `BachPlayer.articulationStats()`; `setRoundRobins(false)` turns
+them off for the next piece (A/B tests).
 
 ## Parameters
 
