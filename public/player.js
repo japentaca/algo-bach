@@ -9,6 +9,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const randomTextureCheck = document.getElementById('randomTextureCheck');
   const sparseOrnamentsCheck = document.getElementById('sparseOrnamentsCheck');
   const articulationSelect = document.getElementById('articulationSelect');
+  // Per-voice articulation [S, A, T, B]: 'auto' follows the global selector
+  const voiceArtSelects = [0, 1, 2, 3].map(v => document.querySelector(`.voice-art-select[data-voice="${v}"]`));
   let lastArticulationPlan = null;
 
   // MIDI elements
@@ -241,12 +243,82 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  // ---- Per-voice articulation (the row under the global selector) ---------------
+  // Part names per ensemble, for the labels of the row (SATB when the four voices
+  // play the same instrument)
+  const VOICE_LABELS = {
+    VscoStrings: ['Violin I', 'Violin II', 'Viola', 'Cello'],
+    VscoWoodwinds: ['Flute', 'Oboe', 'Clarinet', 'Bassoon'],
+    VscoBrass: ['Trumpet', 'Horn', 'Trombone', 'Bass Trombone'],
+  };
+  const SATB = ['Soprano', 'Alto', 'Tenor', 'Bass'];
+  const VOICE_ART_NAMES = { legato: 'legato', detached: 'detached', pizzicato: 'pizzicato' };
+
+  function voiceLabels(styleName) {
+    if (VOICE_LABELS[styleName]) return VOICE_LABELS[styleName];
+    const inst = STYLE_PRESETS[styleName] && STYLE_PRESETS[styleName].instruments;
+    return inst && inst.length === 4 && new Set(inst).size === 4 ? inst : SATB;
+  }
+
+  /** Whether the ensemble really plucks (VSCO strings): pizzicato is offered per voice only then. */
+  function styleCanPluck(styleName) {
+    const style = STYLE_PRESETS[styleName];
+    return !!style && typeof styleArticulations === 'function' && styleArticulations(style).includes('pizzicato');
+  }
+
+  /**
+   * Fit the row to the ensemble: part names, and pizzicato enabled only where the
+   * ensemble plucks. A voice set to pizzicato shows "detached" (what it plays there)
+   * and gets its pizzicato back when the ensemble plucks again (data-wanted keeps
+   * the listener's choice).
+   */
+  function updateVoiceArtControls(styleName) {
+    const pluck = styleCanPluck(styleName);
+    const labels = voiceLabels(styleName);
+    voiceArtSelects.forEach((sel, v) => {
+      if (!sel) return;
+      const name = document.querySelector(`.voice-art-name[data-voice="${v}"]`);
+      if (name) name.textContent = labels[v];
+      sel.setAttribute('aria-label', `Articulation of ${labels[v]} (voice ${v + 1}, ${SATB[v].toLowerCase()})`);
+      const opt = sel.querySelector('option[value="pizzicato"]');
+      if (opt) {
+        opt.disabled = !pluck;
+        opt.title = pluck ? '' : 'Pizzicato needs an ensemble that plucks (VSCO Strings)';
+      }
+      const wanted = sel.dataset.wanted || sel.value;
+      sel.value = wanted === 'pizzicato' && !pluck ? 'detached' : wanted;
+      sel.classList.toggle('is-own', sel.value !== 'auto');
+    });
+    const hint = document.getElementById('voiceArtsHint');
+    if (hint) {
+      hint.textContent = pluck
+        ? 'Auto follows the Articulation above. Detached keeps long notes held.'
+        : 'Auto follows the Articulation above. Pizzicato needs VSCO Strings (a plucked voice plays detached here).';
+    }
+  }
+
+  voiceArtSelects.forEach(sel => {
+    if (!sel) return;
+    sel.addEventListener('change', () => {
+      sel.dataset.wanted = sel.value;
+      sel.classList.toggle('is-own', sel.value !== 'auto');
+    });
+  });
+
+  /** The per-voice profiles chosen in the row ([S, A, T, B]). */
+  function voiceArtProfiles() {
+    return voiceArtSelects.map(sel => (sel && sel.value) || 'auto');
+  }
+
   // Handle style selection change
   if (styleSelect) {
     styleSelect.addEventListener('change', (e) => {
       currentStyle = e.target.value;
       console.log(`Style changed to: ${currentStyle}`);
+      updateVoiceArtControls(currentStyle);
     });
+    currentStyle = styleSelect.value || currentStyle;
+    updateVoiceArtControls(currentStyle);
 
     // Velocity-layered (VSCO) styles stay disabled unless the server can serve the samples
     if (typeof isVscoAvailable === 'function') {
@@ -586,8 +658,10 @@ document.addEventListener('DOMContentLoaded', () => {
    *   { ok: true, data, durationSecs, finished }  — `finished` resolves true at the natural end
    *                                                 (last note + 3 s tail), false if stopped;
    *   { ok: false, error } on failure, or { ok: false, aborted: true } if superseded by stop/new play.
+   * opts.voiceProfiles ([S, A, T, B]) replaces the per-voice articulation row (the kiosk
+   * passes all 'auto', so a listener's manual choices never leak into its pieces).
    */
-  async function generateAndPlay() {
+  async function generateAndPlay(opts = {}) {
     console.log("Generate button clicked");
     const token = ++playToken;
     const superseded = () => token !== playToken;
@@ -664,25 +738,35 @@ document.addEventListener('DOMContentLoaded', () => {
       const style = STYLE_PRESETS[currentStyle];
       const realArticulations = !useMidi && style.engine === 'vsco' && typeof styleArticulations === 'function';
       const articulationProfile = articulationSelect ? articulationSelect.value : 'auto';
+      // Per-voice profiles on top of the global one. Pizzicato is kept only where the
+      // ensemble plucks (with MIDI output too: there it just shortens the notes, as the
+      // global pizzicato does); elsewhere the plan plays that voice detached.
+      const voiceProfiles = Array.isArray(opts.voiceProfiles) ? opts.voiceProfiles : voiceArtProfiles();
+      const canPluck = styleCanPluck(currentStyle);
       const artPlan = window.BachArticulation
         ? BachArticulation.plan(data, {
-          profile: articulationProfile, bpm, seed: currentSeed,
+          profile: articulationProfile, voiceProfiles, canPluck, bpm, seed: currentSeed,
           caps: realArticulations ? styleArticulations(style) : ['sustain'],
         })
         : null;
       lastArticulationPlan = artPlan;
       const artOf = (i) => (artPlan ? artPlan.arts[i] : { art: 'sustain', solo: false, gainMul: 1 });
-      if (artPlan) console.log('Articulation plan:', artPlan.profile, artPlan.summary, artPlan.sections.map(s => s.text));
+      if (artPlan) console.log('Articulation plan:', artPlan.profile, artPlan.voiceProfiles, artPlan.summary, artPlan.sections.map(s => s.text));
 
       // Continuo organ: the bass doubled in the tutti of a ritornello (VSCO styles with
-      // a continuo stop, Tone output only)
+      // a continuo stop, Tone output only). Not under a plucked bass (the bass voice's
+      // effective profile is pizzicato, per voice or globally, on strings that pluck):
+      // an 8' principal speaks in ~0.1 s and holds, so it would cover the pluck the
+      // listener chose; a plucked bass line is a colour the keyboard leaves to the strings.
       const sections = (artPlan ? artPlan.sections : (data.meta && data.meta.sections)) || [];
+      const pluckedBass = !!artPlan && canPluck && artPlan.voiceProfiles[3] === 'pizzicato';
       const wantsOrgan = !useMidi && continuoOn && style.engine === 'vsco' && !!style.continuo
-        && typeof createContinuoSampler === 'function';
+        && typeof createContinuoSampler === 'function' && !pluckedBass;
       const organPlan = wantsOrgan ? continuoPlan(data, sections) : null;
       continuoInfo = {
         enabled: false,
-        reason: useMidi ? 'midi' : !style.continuo || style.engine !== 'vsco' ? 'style' : !continuoOn ? 'off' : !organPlan ? 'no tutti' : null,
+        reason: useMidi ? 'midi' : !style.continuo || style.engine !== 'vsco' ? 'style' : !continuoOn ? 'off'
+          : pluckedBass ? 'pizzicato bass' : !organPlan ? 'no tutti' : null,
         stop: style.continuo ? `${style.continuo.instrument} / ${style.continuo.articulation}` : null,
         files: 0, planned: 0, played: 0, skipped: 0, outOfRange: 0, outsideTutti: 0,
         tutti: organPlan ? organPlan.tutti : [],
@@ -754,13 +838,18 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       const outputMode = isMidiEnabled() ? 'MIDI' : 'Tone.js';
+      // Voices playing a manner of their own ("Cello pizzicato"), as really played
+      const labels = voiceLabels(currentStyle);
+      const ownVoices = artPlan
+        ? artPlan.voiceProfiles.map((p, v) => (p !== artPlan.profile ? `${labels[v]} ${VOICE_ART_NAMES[p] || p}` : null)).filter(Boolean)
+        : [];
       statusDiv.innerHTML = `
                 <strong>Playing:</strong> ${data.meta.style} in ${data.meta.key} ${data.meta.mode}<br>
                 <strong>Style:</strong> ${STYLE_PRESETS[currentStyle].displayName}<br>
                 <strong>Output:</strong> ${outputMode}<br>
                 <strong>Progression:</strong> ${data.meta.progression}<br>
                 <strong>Expressivity:</strong> ${expressivityPreset} | Random texture: ${randomTexture ? 'on' : 'off'} | Sparse cadences: ${sparseOrnaments ? 'on' : 'off'}<br>
-                <strong>Articulation:</strong> ${artPlan ? `${BachArticulation.PROFILES[artPlan.profile]}${realArticulations ? '' : ' (durations only)'} — ${[...new Set(artPlan.sections.map(s => s.text))].slice(0, 6).join(' · ')}` : 'n/a'}
+                <strong>Articulation:</strong> ${artPlan ? `${BachArticulation.PROFILES[artPlan.profile]}${ownVoices.length ? ` (${ownVoices.join(', ')})` : ''}${realArticulations ? '' : ' (durations only)'} — ${[...new Set(artPlan.sections.map(s => s.text))].slice(0, 6).join(' · ')}` : 'n/a'}
                 ${continuoInfo.enabled ? `<br><strong>Continuo:</strong> organ (8' principal) doubling the bass in the tutti` : ''}
             `;
 
@@ -909,6 +998,10 @@ document.addEventListener('DOMContentLoaded', () => {
       const organIn = (k) => continuoInfo.enabled && continuoInfo.sections[k] && continuoInfo.sections[k].planned > 0;
       const articulation = artPlan ? {
         profile: artPlan.profile,
+        // per voice [S, A, T, B]: what each voice plays (the global profile where it
+        // follows it) and what was asked for ('auto' = follow)
+        voiceProfiles: artPlan.voiceProfiles.slice(),
+        voiceRequested: artPlan.voiceRequested.slice(),
         real: realArticulations,
         sections: artPlan.sections.map((s, k) => ({
           ...s,

@@ -33,6 +33,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const ARTICULATION_WEIGHTS = { auto: 0.6, legato: 0.14, detached: 0.14, pizzicato: 0.12 };
   const PIZZICATO_STYLES = ['VscoStrings'];
   const ARTICULATION_IT = { auto: 'Articolazione naturale', legato: 'Tutto legato', detached: 'Tutto staccato', pizzicato: 'Tutto pizzicato' };
+  const KIOSK_VOICE_PROFILES = ['auto', 'auto', 'auto', 'auto'];  // no per-voice overrides
   // Reverb: always on in kiosk mode. Rooms suited to Baroque music (churches, halls),
   // each with a wet-mix range (%) set by its length: long tails get a little less mix.
   // The player crossfades dry = 1 - mix, wet = mix; ~35% puts the hall clearly audible
@@ -411,7 +412,9 @@ document.addEventListener('DOMContentLoaded', () => {
         setSections(null);
         setState('Componendo… (composing)');
 
-        const result = await withTimeout(player.generateAndPlay(), GENERATE_TIMEOUT_MS);
+        // The kiosk picks its own (global) profile: the listener's per-voice choices are
+        // ignored for its pieces (and left untouched in the page for after the kiosk)
+        const result = await withTimeout(player.generateAndPlay({ voiceProfiles: KIOSK_VOICE_PROFILES }), GENERATE_TIMEOUT_MS);
         if (!active || myRun !== runId) break;
         if (!result || !result.ok) {
           throw (result && result.error) || new Error(result && result.aborted ? 'playback aborted' : 'generation failed');

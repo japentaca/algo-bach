@@ -271,6 +271,60 @@
             color: var(--ink-soft);
         }
 
+        /* Per-voice articulation: a compact row of four small selects under the grid */
+        .voice-arts {
+            min-width: 0;
+            margin: 1.1rem 0 0;
+            padding: 0.55rem 0.9rem 0.75rem;
+            text-align: left;
+            border: 1px solid var(--gold-soft);
+            border-radius: 3px;
+        }
+
+        .voice-arts legend {
+            padding: 0 0.45rem;
+        }
+
+        .voice-arts-grid {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 0.55rem 0.8rem;
+        }
+
+        .voice-art {
+            display: flex;
+            flex-direction: column;
+            gap: 0.15rem;
+            min-width: 0;
+        }
+
+        .voice-art-name {
+            font-family: var(--font-period);
+            font-style: italic;
+            font-size: 0.98rem;
+            color: var(--accent);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        select.voice-art-select {
+            padding: 0.35rem 1.9rem 0.35rem 0.55rem;
+            font-size: 0.98rem;
+        }
+
+        /* a voice with a manner of its own is marked with the wax rule of the voice panels */
+        select.voice-art-select.is-own {
+            border-left: 3px solid var(--wax);
+        }
+
+        .voice-arts-hint {
+            margin: 0.45rem 0 0;
+            font-style: italic;
+            font-size: 0.88rem;
+            color: var(--ink-soft);
+        }
+
         /* Row that holds the main action(s). Kiosk/autoplay toggle can sit here. */
         .play-row {
             display: flex;
@@ -1074,6 +1128,10 @@
                 font-size: 1.2rem;
             }
 
+            .voice-arts-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+
             .kiosk-stage {
                 padding: 2.1rem 1.1rem 1.6rem;
             }
@@ -1211,6 +1269,49 @@
                     </select>
                 </label>
             </div>
+            <fieldset class="voice-arts" id="voiceArts"
+                title="Give one voice its own articulation on top of the Articulation selector (e.g. a pizzicato bass). Auto follows the selector.">
+                <legend class="field-label">Articulation per voice</legend>
+                <div class="voice-arts-grid">
+                    <label class="voice-art">
+                        <span class="voice-art-name" data-voice="0">Soprano</span>
+                        <select class="voice-art-select" data-voice="0" aria-label="Articulation of voice 1 (soprano)">
+                            <option value="auto">Auto</option>
+                            <option value="legato">Legato</option>
+                            <option value="detached">Detached</option>
+                            <option value="pizzicato">Pizzicato</option>
+                        </select>
+                    </label>
+                    <label class="voice-art">
+                        <span class="voice-art-name" data-voice="1">Alto</span>
+                        <select class="voice-art-select" data-voice="1" aria-label="Articulation of voice 2 (alto)">
+                            <option value="auto">Auto</option>
+                            <option value="legato">Legato</option>
+                            <option value="detached">Detached</option>
+                            <option value="pizzicato">Pizzicato</option>
+                        </select>
+                    </label>
+                    <label class="voice-art">
+                        <span class="voice-art-name" data-voice="2">Tenor</span>
+                        <select class="voice-art-select" data-voice="2" aria-label="Articulation of voice 3 (tenor)">
+                            <option value="auto">Auto</option>
+                            <option value="legato">Legato</option>
+                            <option value="detached">Detached</option>
+                            <option value="pizzicato">Pizzicato</option>
+                        </select>
+                    </label>
+                    <label class="voice-art">
+                        <span class="voice-art-name" data-voice="3">Bass</span>
+                        <select class="voice-art-select" data-voice="3" aria-label="Articulation of voice 4 (bass)">
+                            <option value="auto">Auto</option>
+                            <option value="legato">Legato</option>
+                            <option value="detached">Detached</option>
+                            <option value="pizzicato">Pizzicato</option>
+                        </select>
+                    </label>
+                </div>
+                <p id="voiceArtsHint" class="voice-arts-hint">Auto follows the Articulation above.</p>
+            </fieldset>
             <div class="play-row">
                 <button id="playBtn" class="btn-plaque">Generate &amp; Play</button>
                 <button id="kioskBtn" class="btn-quiet" type="button" aria-pressed="false"

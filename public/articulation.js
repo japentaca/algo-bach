@@ -17,9 +17,19 @@
  * Messa di voce (a swell on a long note) is an ornament too: the final chord, the held
  * top note of a cadence, the long notes of a soloist or of a cantabile (see below).
  *
+ * Per-voice profiles (opts.voiceProfiles, [S, A, T, B]): a voice may leave the global
+ * profile ('auto' = follow it) for legato, detached or pizzicato, e.g. a pizzicato bass
+ * under an otherwise natural plan. The voice then plays that manner with the same
+ * rules as the global profile (a detached voice still holds its long notes, ornaments
+ * stay slurred, cadences keep their vibrato and messa di voce where the note is
+ * sustained), while the voices left on auto get exactly the plan they would get
+ * without the override: every shared coin and every vibrato draw is made on the
+ * global plan first, and the overrides are applied on top (see plan()).
+ *
  * The plan is seeded by the piece's seed, so the same seed gives the same articulation.
- * Output: plan(data, opts) -> { profile, arts: [{art, solo, gainMul, slur, tight, swell?}] (one
- * per note, same order as data.notes), sections: [{..., character, text, startBeat, endBeat}] }.
+ * Output: plan(data, opts) -> { profile, voiceProfiles, voiceRequested, arts: [{art, solo,
+ * gainMul, slur, tight, swell?}] (one per note, same order as data.notes), sections: [{...,
+ * character, voiceCharacters, text, startBeat, endBeat}], summary, voiceSummary }.
  */
 (function () {
   const ORNAMENT_TYPES = new Set([
@@ -47,6 +57,12 @@
     dotted: ['staccato', 'naturale'],
   };
   const CHARACTER_WEIGHT = { concitato: 0.35 };  // a rarity
+
+  // The character a fixed profile gives (globally or to one voice)
+  const FORCED_CHARACTER = { legato: 'legato', detached: 'staccato', pizzicato: 'pizzicato' };
+  // Italian part names for the section labels ("Variazione III · spiccato · basso pizzicato")
+  const VOICE_IT = ['soprano', 'alto', 'tenore', 'basso'];
+  const VOICE_IT_STRINGS = ['violino I', 'violino II', 'viola', 'basso'];
 
   const FORM_CHARACTER = { Chorale: 'cantabile', Prelude: 'naturale', Suite: 'naturale' };
   const FORM_IT = {
@@ -140,7 +156,7 @@
     }
 
     // A fixed profile replaces the characters (the tutti / solo orchestration stays)
-    const forced = { legato: 'legato', detached: 'staccato', pizzicato: 'pizzicato' }[profile];
+    const forced = FORCED_CHARACTER[profile];
     if (forced) {
       sections.forEach(s => {
         s.soloSection = s.kind === 'solo';
@@ -208,14 +224,66 @@
     return coin('mixed', 0.5) ? 'staccato' : 'sustain';
   }
 
+  /**
+   * Articulation of a figure under a section character ('staccato': decided per note,
+   * returns null). `coin` is only drawn by the natural characters.
+   */
+  function figureArt(c, f, voice, coin, sec, soloist) {
+    switch (c) {
+      case 'legato': case 'cantabile': return 'sustain';
+      case 'staccato': return null;  // per note (noteArt)
+      case 'pizzicato': return 'pizzicato';
+      case 'pizzicato-acc': return voice === 0 ? 'sustain' : 'pizzicato';
+      case 'concitato': return (voice === 1 || voice === 2) && f.secs >= 0.45 ? 'tremolo' : naturalFigure(f, voice, coin, false);
+      case 'solo':
+        if (soloist) return naturalFigure(f, voice, coin, false);
+        if (voice === 3 && sec.pizzBass) return 'pizzicato';
+        return f.secs < 0.55 ? 'staccato' : 'sustain';
+      case 'tutti': return naturalFigure(f, voice, coin, true);
+      default: return naturalFigure(f, voice, coin, false);  // naturale, fugato, episodio
+    }
+  }
+
+  /** Articulation of one note of a figure (figArt = figureArt(...)) under character c. */
+  function noteArt(c, n, figArt, secsPerBeat) {
+    let art = figArt;
+    const secs = n.beats * secsPerBeat;
+    if (c === 'staccato') art = n.beats <= 1 && secs < 0.9 ? 'staccato' : 'sustain';
+    if (c === 'fugato' && THEME_TYPES.has(n.type)) art = 'sustain';           // the subject sings
+    if (c === 'episodio' && n.type === 'episode') art = secs < 0.9 ? 'staccato' : 'sustain';  // episodes detached
+    if (ORNAMENT_TYPES.has(n.type) && art !== 'pizzicato') art = 'sustain';   // trills, suspensions: slurred
+    return art;
+  }
+
+  /** "a", "a e b", "a, b e c" */
+  function joinIt(words) {
+    return words.length < 2 ? words.join('') : `${words.slice(0, -1).join(', ')} e ${words[words.length - 1]}`;
+  }
+
   // ---- The plan --------------------------------------------------------------------
   /**
    * @param {object} data  generator output { notes, meta }
-   * @param {object} opts  { profile: 'auto'|'legato'|'detached'|'pizzicato', bpm, seed, caps: [articulations] }
+   * @param {object} opts  { profile: 'auto'|'legato'|'detached'|'pizzicato', bpm, seed, caps: [articulations],
+   *   voiceProfiles: [S, A, T, B] each 'auto' (follow `profile`) | 'legato' | 'detached' | 'pizzicato',
+   *   canPluck: whether the ensemble can play pizzicato (default: caps include it). A voice
+   *   asked for pizzicato by an ensemble that cannot pluck plays detached instead. }
    */
   function plan(data, opts = {}) {
     const profile = PROFILES[opts.profile] ? opts.profile : 'auto';
     const caps = new Set(opts.caps || ['sustain']);
+    const canPluck = opts.canPluck ?? caps.has('pizzicato');
+    // Per-voice profiles. voiceOverride[v]: the manner voice v plays instead of the global
+    // plan, or null (on auto, or asking for what the global profile already gives).
+    const voiceRequested = [0, 1, 2, 3].map(v => {
+      const p = Array.isArray(opts.voiceProfiles) ? opts.voiceProfiles[v] : null;
+      return PROFILES[p] ? p : 'auto';
+    });
+    const voiceOverride = voiceRequested.map(p => {
+      if (p === 'auto' || p === profile) return null;
+      const q = p === 'pizzicato' && !canPluck ? 'detached' : p;  // graceful fallback
+      return q === profile ? null : q;
+    });
+    const voiceProfiles = voiceOverride.map(p => p || profile);  // what each voice really plays
     const secsPerBeat = 60 / (opts.bpm || 120);
     const rng = seeded(`${opts.seed || 'default'}|${(data.meta && data.meta.form) || ''}|articulation`);
     const notes = data.notes.map((n, i) => ({
@@ -241,48 +309,40 @@
       return k;
     };
 
+    // The character voice v plays in section k: its own manner, or the section's
+    const voiceChar = (k, v) => (voiceOverride[v] ? FORCED_CHARACTER[voiceOverride[v]] : sections[k].character);
+
     const arts = notes.map(() => ({ art: 'sustain', solo: false, gainMul: 1 }));
+    const ownArt = new Array(notes.length);  // overridden voices: the art of their own manner
     const coins = new Map();  // "section|phrase|kind" -> detached?
     const byVoice = [[], [], [], []];
     notes.forEach(n => byVoice[n.voice].push(n));
     byVoice.forEach(v => v.sort((a, b) => a.startTime - b.startTime));
 
+    // Every voice is first planned under the global plan, overridden or not, so the coins
+    // shared by the voices of a phrase (and the RNG stream behind them) are drawn exactly
+    // as without overrides: the voices left on auto do not change.
     for (let voice = 0; voice < 4; voice++) {
       const figures = figuresOf(byVoice[voice], sectionOf, phraseOf, secsPerBeat);
       figures.forEach(f => {
-        const sec = sections[sectionOf(f.notes[0])];
-        const where = `${sectionOf(f.notes[0])}|${phraseOf(f.notes[0])}`;
+        const k = sectionOf(f.notes[0]);
+        const sec = sections[k];
+        const where = `${k}|${phraseOf(f.notes[0])}`;
         const coin = (kind, p) => {
-          const k = `${where}|${kind}`;
-          if (!coins.has(k)) coins.set(k, rng() < p);
-          return coins.get(k);
+          const key = `${where}|${kind}`;
+          if (!coins.has(key)) coins.set(key, rng() < p);
+          return coins.get(key);
         };
         const c = sec.character;
         const soloist = sec.soloSection && voice === 0;
-        let figArt;
-        switch (c) {
-          case 'legato': case 'cantabile': figArt = 'sustain'; break;
-          case 'staccato': figArt = null; break;  // per note below
-          case 'pizzicato': figArt = 'pizzicato'; break;
-          case 'pizzicato-acc': figArt = voice === 0 ? 'sustain' : 'pizzicato'; break;
-          case 'concitato': figArt = (voice === 1 || voice === 2) && f.secs >= 0.45 ? 'tremolo' : naturalFigure(f, voice, coin, false); break;
-          case 'solo':
-            if (soloist) figArt = naturalFigure(f, voice, coin, false);
-            else if (voice === 3 && sec.pizzBass) figArt = 'pizzicato';
-            else figArt = f.secs < 0.55 ? 'staccato' : 'sustain';
-            break;
-          case 'tutti': figArt = naturalFigure(f, voice, coin, true); break;
-          default: figArt = naturalFigure(f, voice, coin, false);  // naturale, fugato, episodio
-        }
+        const figArt = figureArt(c, f, voice, coin, sec, soloist);
+        // A fixed manner draws no coin (legato / staccato / pizzicato)
+        const own = voiceOverride[voice] ? voiceChar(k, voice) : null;
+        const ownFig = own ? figureArt(own, f, voice, coin, sec, soloist) : null;
         f.notes.forEach(n => {
-          let art = figArt;
-          const secs = n.beats * secsPerBeat;
-          if (c === 'staccato') art = n.beats <= 1 && secs < 0.9 ? 'staccato' : 'sustain';
-          if (c === 'fugato' && THEME_TYPES.has(n.type)) art = 'sustain';           // the subject sings
-          if (c === 'episodio' && n.type === 'episode') art = secs < 0.9 ? 'staccato' : 'sustain';  // episodes detached
-          if (ORNAMENT_TYPES.has(n.type) && art !== 'pizzicato') art = 'sustain';   // trills, suspensions: slurred
           const a = arts[n.i];
-          a.art = art;
+          a.art = noteArt(c, n, figArt, secsPerBeat);
+          if (own) ownArt[n.i] = noteArt(own, n, ownFig, secsPerBeat);
           a.solo = soloist;
           if (sec.soloSection && !soloist) a.gainMul = 0.72;  // the ripieno accompanies the soloist (-3 dB)
         });
@@ -305,22 +365,27 @@
       return null;
     };
     const nearCadence = (n) => cadenceAt(n) !== null;
-    notes.forEach(n => {
+    // Chance of vibrato of a sustained note under character c (0: none)
+    const vibChance = (n, c) => {
       const secs = n.beats * secsPerBeat;
-      const sec = sections[sectionOf(n)];
       const isEnd = n.startTime + n.beats >= endBeat - 0.25;
-      if (isEnd && secs >= 0.8 && (n.voice === 0 || n.voice === 3)) vib(n, 1);                 // the final chord blooms
-      else if (n.voice === 0 && secs >= 0.9 && nearCadence(n)) vib(n, sec.character === 'cantabile' ? 1 : 0.7);
-      else if (n.voice === 0 && secs >= 1.6 && sec.character === 'cantabile') vib(n, 0.35);
-      else if (arts[n.i].solo && secs >= 0.9) vib(n, 0.8);
+      if (isEnd && secs >= 0.8 && (n.voice === 0 || n.voice === 3)) return 1;                 // the final chord blooms
+      if (n.voice === 0 && secs >= 0.9 && nearCadence(n)) return c === 'cantabile' ? 1 : 0.7;
+      if (n.voice === 0 && secs >= 1.6 && c === 'cantabile') return 0.35;
+      if (arts[n.i].solo && secs >= 0.9) return 0.8;
+      return 0;
+    };
+    notes.forEach(n => {
+      const p = vibChance(n, sections[sectionOf(n)].character);
+      if (p > 0) vib(n, p);
     });
     // Climax of each fugue subject / answer entry: its highest note, if long enough
-    byVoice.forEach(v => {
+    const climaxes = (v, mark) => {
       let group = [];
       const flush = () => {
         if (group.length >= 4) {
           const top = group.reduce((a, b) => (b.midi > a.midi ? b : a));
-          if (top.beats >= 1 && top.beats * secsPerBeat >= 0.5) vib(top, 1);
+          if (top.beats >= 1 && top.beats * secsPerBeat >= 0.5) mark(top);
         }
         group = [];
       };
@@ -331,7 +396,28 @@
         if (theme) group.push(n);
       });
       flush();
-    });
+    };
+    byVoice.forEach(v => climaxes(v, top => vib(top, 1)));
+
+    // ---- Per-voice overrides, on top of the global plan --------------------------------
+    // (the main RNG is not drawn again, so the other voices keep their plan). A note the
+    // voice still sustains keeps the global plan's vibrato decision; a note it sustains
+    // where the global plan did not (e.g. a legato voice in a spiccato variation) gets the
+    // same vibrato rules, drawn from the voice's own stream.
+    const voiceRng = seeded(`${opts.seed || 'default'}|${(data.meta && data.meta.form) || ''}|articulation|voices`);
+    for (let voice = 0; voice < 4; voice++) {
+      if (!voiceOverride[voice]) continue;
+      byVoice[voice].forEach(n => {
+        const a = arts[n.i];
+        const was = a.art;
+        a.art = ownArt[n.i];
+        if (a.art !== 'sustain' || was === 'sustain') return;
+        if (was === 'vibrato') { a.art = 'vibrato'; return; }
+        const p = vibChance(n, voiceChar(sectionOf(n), voice));
+        if (p > 0 && voiceRng() < p) a.art = 'vibrato';
+      });
+      climaxes(byVoice[voice], top => { if (arts[top.i].art === 'sustain') arts[top.i].art = 'vibrato'; });
+    }
 
     // ---- Slurs: a figure under one bow / breath ----------------------------------------
     // A note connected to the previous one, both sustained, that is quick or an
@@ -397,9 +483,12 @@
     };
     const INNER = { 1: 1, 2: 1 };
     // Final chord: the last long note of each voice
-    const finals = notes.filter(n => n.startTime + n.beats >= endBeat - 0.25 && swellable(n));
+    const isFinal = (n) => n.startTime + n.beats >= endBeat - 0.25;
+    const finals = notes.filter(n => isFinal(n) && swellable(n));
     if (finals.length) {
-      const top = finals.find(n => n.voice === 0);
+      // (a top voice of its own, e.g. plucked, does not swell, but its chord still sets the peak)
+      const top = finals.find(n => n.voice === 0) ||
+        (voiceOverride[0] ? notes.find(n => n.voice === 0 && isFinal(n) && n.beats * secsPerBeat >= SWELL_MIN_SECS) : null);
       const chordStart = top ? top.startTime : Math.min(...finals.map(n => n.startTime));
       const peakBeat = chordStart + (endBeat - chordStart) * 0.3;
       finals.forEach(n => setSwell(n, 4 * (n.voice === 0 ? 1 : n.voice === 3 ? 0.3 : 0.6), peakBeat, 'final'));
@@ -409,11 +498,11 @@
     notes.forEach(n => {
       if (n.voice !== 0 || arts[n.i].swell || !swellable(n)) return;
       const a = arts[n.i];
-      const sec = sections[sectionOf(n)];
+      const c = voiceChar(sectionOf(n), 0);
       const b = cadenceAt(n);
       if (a.solo && b !== null) {
         setSwell(n, 6, n.startTime + n.beats * 0.45, 'solo');
-      } else if (a.solo || (b === null && sec.character === 'cantabile' && a.art === 'vibrato' &&
+      } else if (a.solo || (b === null && c === 'cantabile' && a.art === 'vibrato' &&
           n.beats * secsPerBeat >= 1.6)) {
         // inside a phrase only its longest (then highest) such note: its high point
         const k = `${sectionOf(n)}|${phraseOf(n)}`;
@@ -439,24 +528,59 @@
     });
 
     // ---- Labels ------------------------------------------------------------------
+    // The ensemble's character is that of the voices left on auto; the voices with a
+    // manner of their own are named after it ("Variazione III · spiccato · basso
+    // pizzicato"), so a label never claims for the whole ensemble what one part plays.
     const form = (data.meta && data.meta.form) || '';
-    sections.forEach(s => {
-      s.characterLabel = characterLabel(s.character, caps);
+    const names = caps.has('pizzicato') ? VOICE_IT_STRINGS : VOICE_IT;
+    const anyAuto = voiceOverride.some(o => !o);
+    sections.forEach((s, k) => {
+      s.voiceCharacters = [0, 1, 2, 3].map(v => voiceChar(k, v));
+      let ens = s.character;
+      if (!anyAuto) {  // every voice has its own manner: the commonest one leads
+        const count = new Map();
+        s.voiceCharacters.forEach(c => count.set(c, (count.get(c) || 0) + 1));
+        ens = s.voiceCharacters.reduce((best, c) => (count.get(c) > count.get(best) ? c : best));
+      }
+      s.ensembleCharacter = ens;
+      s.characterLabel = characterLabel(ens, caps);
       s.label = sectionLabel(s, form);
-      s.text = s.kind === 'tutti' || s.kind === 'solo'
-        ? `${s.label} · ${s.kind === 'solo' ? (caps.has('solo') ? 'violino solo' : 'solo') : 'tutti'}` +
-          (profile !== 'auto' ? ` · ${s.characterLabel}` : '')
-        : `${s.label} · ${s.characterLabel}`;
+      // What a voice of the ensemble plays under its character, to name only real differences
+      const implied = (v) => (ens === 'pizzicato-acc' ? characterLabel(v === 0 ? 'legato' : 'pizzicato', caps) : s.characterLabel);
+      const groups = new Map();  // label -> voices
+      let soloOwn = null;
+      s.voiceCharacters.forEach((c, v) => {
+        if (!voiceOverride[v]) return;
+        const lbl = characterLabel(c, caps);
+        if (lbl === implied(v)) return;
+        if (v === 0 && s.kind === 'solo') { soloOwn = lbl; return; }  // "violino solo pizzicato"
+        if (!groups.has(lbl)) groups.set(lbl, []);
+        groups.get(lbl).push(v);
+      });
+      const parts = [s.label];
+      if (s.kind === 'tutti' || s.kind === 'solo') {
+        const who = s.kind === 'solo' ? (caps.has('solo') ? 'violino solo' : 'solo') : 'tutti';
+        parts.push(soloOwn ? `${who} ${soloOwn}` : who);
+        if (profile !== 'auto' || !anyAuto) parts.push(s.characterLabel);
+      } else {
+        parts.push(s.characterLabel);
+      }
+      groups.forEach((vs, lbl) => parts.push(`${joinIt(vs.map(v => names[v]))} ${lbl}`));
+      s.text = parts.join(' · ');
     });
 
     const summary = {};
-    arts.forEach(a => {
+    const voiceSummary = [{}, {}, {}, {}];  // per voice: art -> notes (checks)
+    arts.forEach((a, i) => {
       const k = a.solo ? `solo.${a.art}` : a.art;
       summary[k] = (summary[k] || 0) + 1;
       if (a.slur) summary.slurred = (summary.slurred || 0) + 1;
       if (a.swell) summary.swelled = (summary.swelled || 0) + 1;
+      const vs = voiceSummary[notes[i].voice];
+      vs[k] = (vs[k] || 0) + 1;
+      if (a.swell) vs.swelled = (vs.swelled || 0) + 1;
     });
-    return { profile, arts, sections, summary };
+    return { profile, voiceProfiles, voiceRequested, arts, sections, summary, voiceSummary };
   }
 
   function characterLabel(c, caps) {

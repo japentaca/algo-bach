@@ -76,6 +76,31 @@ organ continuo, keyboards, short samples, non-VSCO styles or MIDI. Checks:
 `log` of each one), `BachPlayer.articulationStats()` (`swelled` per voice);
 `setMessaDiVoce(false)` turns it off for the next piece (A/B tests).
 
+**Articulation per voice** (the row under the Articulation selector): each voice
+[S, A, T, B] can leave the global profile (`Auto` = follow it) for Legato, Detached or
+Pizzicato, e.g. a pizzicato bass, or a detached bass under a legato melody. The plan
+(`BachArticulation.plan(data, { profile, voiceProfiles, canPluck, ... })`) applies the
+voice's manner with the global profile's rules (a detached voice still holds its long
+notes, ornaments stay slurred, sustained cadence notes keep their vibrato and messa di
+voce; plucked notes never swell). Every shared coin and vibrato draw is made on the
+global plan first, so the voices left on Auto play exactly what they would without the
+override (one exception: the inner voices' `cadence-inner` swells follow the top
+voice's cadence swell, so they drop out when the top voice no longer holds that note).
+Pizzicato is offered only where the ensemble plucks (VSCO Strings); elsewhere a voice
+set to it plays (and shows) Detached, and gets its pizzicato back when the ensemble
+plucks again. Non-VSCO styles and MIDI only shorten the detached / plucked notes, as with
+the global profile. Section labels name the voices that play otherwise ("Variazione II
+· legato · basso pizzicato", "Episodio · violino solo spiccato"). The ritornello soloist
+keeps its solo instrument in whatever manner violin I is given. Under a plucked bass
+(its effective profile pizzicato, per voice or globally, on strings) the continuo organ
+rests (`continuoStats().reason` = `'pizzicato bass'`): an 8' principal would cover the
+pluck; a detached bass keeps the organ. The kiosk ignores the row (its pieces use its own
+global profile only) and leaves it as set. Not persisted between visits (the page keeps
+no settings). Checks: `BachPlayer.lastArticulationPlan()` (`voiceProfiles` = what each
+voice plays, `voiceRequested`, `voiceSummary` per voice, `sections[].voiceCharacters`),
+the `articulation.voiceProfiles` returned by `generateAndPlay`, and
+`BachPlayer.articulationStats()` (notes played per voice and articulation).
+
 ## Parameters
 
 | Parameter | Values | Default | Description |
