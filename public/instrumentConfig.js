@@ -345,53 +345,6 @@ const INSTRUMENT_SAMPLES = {
       'C7': 'harp-c7.mp3',
     }
   },
-  'Chorus': {
-    displayName: 'Chorus (SATB)',
-    range: 'A2-F#5',
-    baseUrl: 'Orchestra/Chorus/',
-    samples: {
-      // Male voices (Tenor/Bass) - octaves 2, 3, 4
-      'A2': 'chorus-male-a2.mp3',
-      'G2': 'chorus-male-g2.mp3',
-      'A#2': 'chorus-male-aSHARP2.mp3',
-      'B2': 'chorus-male-b2.mp3',
-      'C3': 'chorus-male-c3.mp3',
-      'C#3': 'chorus-male-cSHARP3.mp3',
-      'D3': 'chorus-male-d3.mp3',
-      'D#3': 'chorus-male-dSHARP3.mp3',
-      'E3': 'chorus-male-e3.mp3',
-      'F3': 'chorus-male-f3.mp3',
-      'F#3': 'chorus-male-fSHARP3.mp3',
-      'G#3': 'chorus-male-gSHARP3.mp3',
-      'A3': 'chorus-male-a3.mp3',
-      'C4': 'chorus-male-c4.mp3',
-      'C#4': 'chorus-male-cSHARP4.mp3',
-      'D4': 'chorus-male-d4.mp3',
-      'D#4': 'chorus-male-dSHARP4.mp3',
-      'E4': 'chorus-male-e4.mp3',
-      'F4': 'chorus-male-f4.mp3',
-      'F#4': 'chorus-male-fSHARP4.mp3',
-      // Female voices (Soprano/Alto) - octaves 4, 5
-      'A4': 'chorus-female-a4.mp3',
-      'A#4': 'chorus-female-aSHARP4.mp3',
-      'B4': 'chorus-female-b4.mp3',
-      'G4': 'chorus-female-g4.mp3',
-      'G#4': 'chorus-female-gSHARP4.mp3',
-      'C5': 'chorus-female-c5.mp3',
-      'C#5': 'chorus-female-cSHARP5.mp3',
-      'D5': 'chorus-female-d5.mp3',
-      'D#5': 'chorus-female-dSHARP5.mp3',
-      'E5': 'chorus-female-e5.mp3',
-      'F5': 'chorus-female-f5.mp3',
-      'F#5': 'chorus-female-fSHARP5.mp3',
-      'G5': 'chorus-female-g5.mp3',
-      'G#5': 'chorus-female-gSHARP5.mp3',
-      'A5': 'chorus-female-a5.mp3',
-      'A#5': 'chorus-female-aSHARP5.mp3',
-      'B5': 'chorus-female-b5.mp3',
-      'C6': 'chorus-female-c6.mp3',
-    }
-  }
 };
 
 /**
@@ -402,10 +355,6 @@ const STYLE_PRESETS = {
   'Strings': {
     displayName: 'Strings (Quartet)',
     instruments: ['Violin', 'Violas', 'Cello', 'Basses']
-  },
-  'Choir': {
-    displayName: 'Choir (Chorus)',
-    instruments: ['Chorus', 'Chorus', 'Chorus', 'Chorus']
   },
   'Piano': {
     displayName: 'Piano (Solo)',

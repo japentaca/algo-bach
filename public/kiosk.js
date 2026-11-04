@@ -26,7 +26,7 @@ document.addEventListener('DOMContentLoaded', () => {
     Variations: [72, 116],
     Suite: [76, 126],
   };
-  const TEMPO_SHIFT_BY_STYLE = { Choir: -8, Brass: -6, Harp: -4, Piano: 4, VscoBrass: -6, VscoPiano: 4 };
+  const TEMPO_SHIFT_BY_STYLE = { Brass: -6, Harp: -4, Piano: 4, VscoBrass: -6, VscoPiano: 4 };
   // Articulation profile (the "Articulation" selector): mostly the Baroque-practice
   // plan, sometimes one manner for the whole piece. Pizzicato only where the ensemble
   // really plucks (VSCO strings).
@@ -48,7 +48,7 @@ document.addEventListener('DOMContentLoaded', () => {
     'PrimeLong.mp3': [30, 44],
     'PrimeXtraLong.mp3': [26, 38],
   };
-  const REVERB_SHIFT_BY_STYLE = { Choir: 6, Strings: 3, Brass: 2, Harp: -3, Piano: -6, VscoBrass: 2, VscoPiano: -6, VscoStrings: 3 };
+  const REVERB_SHIFT_BY_STYLE = { Strings: 3, Brass: 2, Harp: -3, Piano: -6, VscoBrass: 2, VscoPiano: -6, VscoStrings: 3 };
 
   // Stereo seatings [S, A, T, B] scaled by a random width. Ensembles: the modern stage
   // (high voices left, low voices right) or the antiphonal Baroque seating (the two
@@ -73,7 +73,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const MODE_IT = { major: 'maggiore', minor: 'minore' };
   const STYLE_IT = {
     Strings: "Quartetto d'archi", Piano: 'Pianoforte', Woodwinds: 'Quartetto di legni',
-    Brass: 'Quartetto di ottoni', Choir: 'Coro', Harp: 'Arpa', Mixed: 'Orchestra',
+    Brass: 'Quartetto di ottoni', Harp: 'Arpa', Mixed: 'Orchestra',
     VscoPiano: 'Pianoforte verticale (VSCO)', VscoWoodwinds: 'Quartetto di legni (VSCO)',
     VscoBrass: 'Quartetto di ottoni (VSCO)', VscoStrings: "Quartetto d'archi (VSCO)",
   };
