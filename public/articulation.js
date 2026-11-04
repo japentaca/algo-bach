@@ -14,10 +14,12 @@
  * Vibrato is an ornament (as in the period): only long cadential notes, the climax of
  * a fugue subject, and the long notes of a cantabile or a soloist. Tremolo is the
  * rare "stile concitato" (Monteverdi) of a slow variation.
+ * Messa di voce (a swell on a long note) is an ornament too: the final chord, the held
+ * top note of a cadence, the long notes of a soloist or of a cantabile (see below).
  *
  * The plan is seeded by the piece's seed, so the same seed gives the same articulation.
- * Output: plan(data, opts) -> { profile, arts: [{art, solo, gainMul, slur, tight}] (one per note,
- * same order as data.notes), sections: [{..., character, text, startBeat, endBeat}] }.
+ * Output: plan(data, opts) -> { profile, arts: [{art, solo, gainMul, slur, tight, swell?}] (one
+ * per note, same order as data.notes), sections: [{..., character, text, startBeat, endBeat}] }.
  */
 (function () {
   const ORNAMENT_TYPES = new Set([
@@ -295,11 +297,14 @@
     const cadenceBeats = new Set();
     ((data.meta && data.meta.phraseMarkers) || []).forEach(m => cadenceBeats.add(m.endBeat));
     sections.forEach(s => cadenceBeats.add(s.endBeat));
-    const nearCadence = (n) => {
+    // (onsets carry a few thousandths of a beat of jitter: a whole note at 59.998 still
+    // belongs to the cadence at 64)
+    const cadenceAt = (n) => {
       const end = n.startTime + n.beats;
-      for (const b of cadenceBeats) if (Math.abs(end - b) <= 0.5 && n.startTime >= b - 4) return true;
-      return false;
+      for (const b of cadenceBeats) if (Math.abs(end - b) <= 0.5 && n.startTime >= b - 4 - 0.05) return b;
+      return null;
     };
+    const nearCadence = (n) => cadenceAt(n) !== null;
     notes.forEach(n => {
       const secs = n.beats * secsPerBeat;
       const sec = sections[sectionOf(n)];
@@ -346,6 +351,93 @@
       }
     });
 
+    // ---- Messa di voce: a long note begun softly, swelled and diminished --------------
+    // (Caccini, Tosi, Geminiani's "swelling of the sound"). An ornament, like the vibrato
+    // it goes with, so it is placed by context and never on every long note:
+    //   - the final chord: every voice together, gently (top voice 4 dB, inner voices
+    //     60%, bass 30%), peaking early (30%) and dying away with the piece;
+    //   - the held top note of a cadence that carries the cadential vibrato (every
+    //     cadence of a cantabile, ~70% elsewhere): 5 dB on a PAC / HC / section end,
+    //     3.5 dB on an IAC or an unnamed phrase end, none on a deceptive cadence (it
+    //     does not come to rest). On the strong ones the inner voices holding the same
+    //     chord swell with it at half depth, peaking at the same moment; the bass stays even;
+    //   - a soloist (6 dB): its long cadence notes, and inside a phrase only its longest
+    //     (then highest) long note, the phrase's high point; a cantabile top voice
+    //     (4 dB): likewise one note per phrase, among the long vibrato notes (>= 1.6 s)
+    //     the vibrato rule picked. Alone: the accompaniment stays even under them.
+    // Only sustained notes (sustain / vibrato) of at least SWELL_MIN_SECS: a swell needs
+    // ~0.5 s to rise and as much to die away to be heard as one and not as an accent
+    // (the section strings' recorded attack alone takes ~0.25 s). Up to 2 s the swell is
+    // proportionally shallower. Never a slurred note (it continues a figure). No RNG:
+    // the vibrato plan above already made the per-cadence choices.
+    // arts[i].swell = { depth: dB below the note's level at its start (and end), peak:
+    // where it reaches its full level (0..1 of the note), ctx }. The player shapes it
+    // (layeredSampler.js); the peak is the note's normal level, never above.
+    const SWELL_MIN_SECS = 1.2;
+    const CADENCE_DEPTH = { PAC: 5, HC: 5, PHC: 5, IAC: 3.5, DC: 0 };
+    const cadenceType = new Map();  // cadence beat -> PAC / HC / IAC / DC / 'section' / ''
+    ((data.meta && data.meta.phraseMarkers) || []).forEach(m => cadenceType.set(m.endBeat, m.cadence || ''));
+    sections.forEach(s => { if (!cadenceType.get(s.endBeat)) cadenceType.set(s.endBeat, 'section'); });
+    const cadenceDepth = (b) => {
+      const t = cadenceType.get(b);
+      return t === 'section' ? 5 : (CADENCE_DEPTH[t] ?? 3.5);
+    };
+    const swellable = (n) => {
+      const a = arts[n.i];
+      return SUSTAINED.has(a.art) && !a.slur && n.beats * secsPerBeat >= SWELL_MIN_SECS;
+    };
+    const lengthScale = (n) => Math.min(1, Math.max(0.6, n.beats * secsPerBeat / 2));
+    const round1 = (x) => Math.round(x * 10) / 10;
+    const setSwell = (n, depth, peakBeat, ctx) => {
+      const d = round1(depth * lengthScale(n));
+      if (!(d >= 0.5)) return;
+      // the peak at an absolute moment (beats), so the voices of a chord swell together
+      const peak = Math.min(0.85, Math.max(0.15, (peakBeat - n.startTime) / n.beats));
+      arts[n.i].swell = { depth: d, peak: Math.round(peak * 100) / 100, ctx };
+    };
+    const INNER = { 1: 1, 2: 1 };
+    // Final chord: the last long note of each voice
+    const finals = notes.filter(n => n.startTime + n.beats >= endBeat - 0.25 && swellable(n));
+    if (finals.length) {
+      const top = finals.find(n => n.voice === 0);
+      const chordStart = top ? top.startTime : Math.min(...finals.map(n => n.startTime));
+      const peakBeat = chordStart + (endBeat - chordStart) * 0.3;
+      finals.forEach(n => setSwell(n, 4 * (n.voice === 0 ? 1 : n.voice === 3 ? 0.3 : 0.6), peakBeat, 'final'));
+    }
+    // Cadences, soloists, cantabile
+    const inPhrase = new Map();  // "section|phrase" -> the best mid-phrase candidate
+    notes.forEach(n => {
+      if (n.voice !== 0 || arts[n.i].swell || !swellable(n)) return;
+      const a = arts[n.i];
+      const sec = sections[sectionOf(n)];
+      const b = cadenceAt(n);
+      if (a.solo && b !== null) {
+        setSwell(n, 6, n.startTime + n.beats * 0.45, 'solo');
+      } else if (a.solo || (b === null && sec.character === 'cantabile' && a.art === 'vibrato' &&
+          n.beats * secsPerBeat >= 1.6)) {
+        // inside a phrase only its longest (then highest) such note: its high point
+        const k = `${sectionOf(n)}|${phraseOf(n)}`;
+        const best = inPhrase.get(k);
+        if (!best || n.beats > best.beats || (n.beats === best.beats && n.midi > best.midi)) inPhrase.set(k, n);
+      } else if (b !== null && a.art === 'vibrato') {
+        const depth = cadenceDepth(b);
+        if (!(depth > 0)) return;
+        const peakBeat = n.startTime + n.beats * 0.4;
+        setSwell(n, depth, peakBeat, 'cadence');
+        // on a full close the inner voices holding the chord breathe with the top voice
+        if (depth < 5) return;
+        notes.forEach(m => {
+          if (!INNER[m.voice] || arts[m.i].swell || arts[m.i].solo || !swellable(m)) return;
+          if (Math.abs(m.startTime - n.startTime) > 0.5 || cadenceAt(m) !== b) return;
+          setSwell(m, depth * 0.5, peakBeat, 'cadence-inner');
+        });
+      }
+    });
+    inPhrase.forEach(n => {
+      if (arts[n.i].solo) setSwell(n, 6, n.startTime + n.beats * 0.45, 'solo');
+      else setSwell(n, 4, n.startTime + n.beats * 0.5, 'cantabile');
+    });
+
     // ---- Labels ------------------------------------------------------------------
     const form = (data.meta && data.meta.form) || '';
     sections.forEach(s => {
@@ -362,6 +454,7 @@
       const k = a.solo ? `solo.${a.art}` : a.art;
       summary[k] = (summary[k] || 0) + 1;
       if (a.slur) summary.slurred = (summary.slurred || 0) + 1;
+      if (a.swell) summary.swelled = (summary.swelled || 0) + 1;
     });
     return { profile, arts, sections, summary };
   }

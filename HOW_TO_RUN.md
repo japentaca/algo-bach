@@ -58,6 +58,24 @@ the other forms, or for non-VSCO styles. Checks: `BachPlayer.continuoStats()` (n
 planned / played per section, files loaded, `outsideTutti` = 0, `log` of the organ
 notes' beats); `setContinuo(false)` turns it off for the next piece (A/B tests).
 
+**Messa di voce** (VSCO styles except VscoPiano; Tone output only): the articulation plan
+(`public/articulation.js`) marks a few long sustained notes (≥ 1.2 s at the current
+tempo, never slurred, staccato, pizzicato or tremolo) to be begun softly, swelled and
+diminished, as an ornament that goes with the vibrato: the final chord (all voices
+together: top 4 dB, inner voices 60%, bass 30%, peak at 30%), the held top note of a
+cadence that carries the cadential vibrato (5 dB on PAC / HC / section ends, 3.5 dB on
+IAC, none on a deceptive cadence; on the strong ones the inner voices follow at half
+depth, the bass does not), a soloist's long cadence notes and one high point per phrase
+(6 dB), and one long vibrato note per phrase of a cantabile top voice (4 dB). Notes
+under 2 s get a proportionally shallower swell. `LayeredSampler` shapes it with
+exponential gain ramps: the note starts `depth` dB under its level, reaches it at the
+peak and diminishes again before the release (only half as much before a slurred
+note). It never goes above the note's normal level, so peaks are unchanged. Not on the
+organ continuo, keyboards, short samples, non-VSCO styles or MIDI. Checks:
+`BachPlayer.swellStats()` (swells planned / played per voice, context and section,
+`log` of each one), `BachPlayer.articulationStats()` (`swelled` per voice);
+`setMessaDiVoce(false)` turns it off for the next piece (A/B tests).
+
 ## Parameters
 
 | Parameter | Values | Default | Description |

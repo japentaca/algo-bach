@@ -27,6 +27,10 @@ document.addEventListener('DOMContentLoaded', () => {
   let continuo = null;       // { sampler, volume, panner } of the current piece
   let continuoOn = true;     // off only for A/B checks (setContinuo, next piece)
   let continuoInfo = null;   // stats of the current / last piece (continuoStats)
+  // Messa di voce (articulation.js marks the swelled long notes): VSCO styles only, never
+  // a keyboard style, the organ or MIDI.
+  let messaOn = true;        // off only for A/B checks (setMessaDiVoce, next piece)
+  let swellInfo = null;      // stats of the current / last piece (swellStats)
   let monoModes = [false, false, false, false];  // Monophonic mode state for each voice
   let limiter;
   let convolver;  // Convolver node for reverb
@@ -687,6 +691,35 @@ document.addEventListener('DOMContentLoaded', () => {
       };
       let organNotes = null;
 
+      // Messa di voce: which planned swells are passed on, and the stats of the piece
+      const swellOn = messaOn && realArticulations && !style.keyboard;
+      const sectionIndexAt = (beat) => {
+        for (let k = sections.length - 1; k >= 0; k--) if (beat >= sections[k].startBeat - 1e-3) return k;
+        return 0;
+      };
+      swellInfo = {
+        enabled: swellOn,
+        reason: useMidi ? 'midi' : style.engine !== 'vsco' ? 'style' : style.keyboard ? 'keyboard' : !messaOn ? 'off' : null,
+        planned: 0, passed: 0, played: 0,
+        voices: [0, 1, 2, 3].map(() => ({ planned: 0, played: 0 })),
+        contexts: {},
+        sections: sections.map(s => ({ text: s.text || s.kind, startBeat: s.startBeat, endBeat: s.endBeat, planned: 0, played: 0 })),
+        log: [],  // [beat, voice, pitch, ctx, depth, peak, played] of the swells passed on
+      };
+      if (artPlan) {
+        artPlan.arts.forEach((a, i) => {
+          if (!a.swell) return;
+          const n = data.notes[i];
+          const v = Math.min(Math.max(n.voice, 0), 3);
+          swellInfo.planned++;
+          swellInfo.voices[v].planned++;
+          const c = swellInfo.contexts[a.swell.ctx] || (swellInfo.contexts[a.swell.ctx] = { planned: 0, played: 0 });
+          c.planned++;
+          const sec = swellInfo.sections[sectionIndexAt(n.startTime + 0.05)];
+          if (sec) sec.planned++;
+        });
+      }
+
       if (!useMidi) {
         // Load samplers for selected style (layered styles: only this piece's files and articulations)
         const annotated = data.notes.map((n, i) => ({ ...n, art: artOf(i).art, solo: artOf(i).solo }));
@@ -756,7 +789,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const humanizeDuration = (Math.random() * 0.05);
         const at = (note.startTime * beatDuration * bpmScaleFactor) + humanizeStart;
         let dur = (beatsOf(note) * beatDuration * bpmScaleFactor) - 0.02 + humanizeDuration;
-        const { art, solo, gainMul, slur, tight } = artOf(i);
+        const { art, solo, gainMul, slur, tight, swell } = artOf(i);
         // Without articulation samples a detached note is just a shorter note
         if (!realArticulations && (art === 'staccato' || art === 'pizzicato') && typeof shortArticulationLength === 'function') {
           dur = shortArticulationLength(dur);
@@ -768,7 +801,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
         return {
           at,
-          play: { art, solo, slur: !!slur, tight: !!tight },
+          play: { art, solo, slur: !!slur, tight: !!tight, swell: swellOn && swell ? swell : null },
+          i,
           dur: Math.max(0.03, dur),
           pitch: note.pitch,
           voice: Math.min(Math.max(note.voice, 0), 3),
@@ -805,6 +839,18 @@ document.addEventListener('DOMContentLoaded', () => {
       // buffer sources at once, and a stopped piece left them all pending, which
       // saturated the audio thread (clock running at ~0.1x, pieces "playing" silently).
       clearScheduler();
+      const info = swellInfo;
+      const noteSwell = (ev, note, played) => {
+        info.passed++;
+        const s = ev.play.swell;
+        if (info.log.length < 2000) info.log.push([note.startTime, ev.voice, ev.pitch, s.ctx, s.depth, s.peak, played]);
+        if (!played) return;
+        info.played++;
+        info.voices[ev.voice].played++;
+        if (info.contexts[s.ctx]) info.contexts[s.ctx].played++;
+        const sec = info.sections[sectionIndexAt(note.startTime + 0.05)];
+        if (sec) sec.played++;
+      };
       let next = 0;
       const pump = () => {
         if (superseded()) { clearScheduler(); return; }
@@ -829,9 +875,10 @@ document.addEventListener('DOMContentLoaded', () => {
               // Works for both Tone.Sampler and Tone.PolySynth. A late tick plays the
               // note slightly late instead of dropping it.
               // The MIDI velocity (5th argument) picks the layer of velocity-layered
-              // samplers; the 6th ({art, solo, slur, tight}) picks the articulation and
-              // phrasing of VSCO styles. Tone.Sampler ignores both.
-              samplers[ev.voice].triggerAttackRelease(ev.pitch, ev.dur, Math.max(time, Tone.now()), ev.gain, ev.midiVelocity, ev.play);
+              // samplers; the 6th ({art, solo, slur, tight, swell}) picks the articulation
+              // and phrasing of VSCO styles. Tone.Sampler ignores both.
+              const swelled = samplers[ev.voice].triggerAttackRelease(ev.pitch, ev.dur, Math.max(time, Tone.now()), ev.gain, ev.midiVelocity, ev.play);
+              if (ev.play.swell) noteSwell(ev, data.notes[ev.i], swelled === true);
             }
           } catch (err) {
             console.warn(`Skipping note ${ev.pitch} (voice ${ev.voice}): ${err.message}`);
@@ -915,6 +962,20 @@ document.addEventListener('DOMContentLoaded', () => {
     } : null),
     // A/B checks: the organ on/off from the next piece
     setContinuo: (on) => { continuoOn = !!on; },
+    // Messa di voce of the current / last piece: swells planned by the articulation plan,
+    // passed to the samplers and really shaped (`played`), per voice, context (final,
+    // cadence, cadence-inner, solo, cantabile) and section; `log` of the swells passed
+    // on: [beat, voice, pitch, ctx, depth dB, peak, played]
+    swellStats: () => (swellInfo ? {
+      ...swellInfo,
+      voices: swellInfo.voices.map(v => ({ ...v })),
+      contexts: JSON.parse(JSON.stringify(swellInfo.contexts)),
+      sections: swellInfo.sections.map(s => ({ ...s })),
+      log: swellInfo.log.map(r => r.slice()),
+    } : null),
+    // A/B checks: the messa di voce on/off from the next piece
+    setMessaDiVoce: (on) => { messaOn = !!on; },
   };
   window.setContinuo = window.BachPlayer.setContinuo;
+  window.setMessaDiVoce = window.BachPlayer.setMessaDiVoce;
 });

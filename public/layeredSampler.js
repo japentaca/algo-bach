@@ -68,6 +68,26 @@
   const QUICK_NOTE = 0.45;     // notes shorter than this (s) skip half of a slow attack
   const attackCache = new WeakMap();  // AudioBuffer -> seconds
 
+  // ---- Messa di voce (swell on a long note, articulation.js) ------------------------
+  const SWELL_MAX_DB = 9;        // deepest start / end below the note's level
+  const SWELL_MIN_NOTE = 0.8;    // a note shorter than this (s, as played) is not swelled
+
+  /**
+   * The swell of a note, or null: { lo, hi: linear factors at start and end (<= 1),
+   * peakAt: seconds after the attack }. `span` = seconds from the end of the attack to
+   * the release. A note followed by a slurred one (tight) diminishes only half as much,
+   * so the slurred note does not jump back up to full level.
+   */
+  function swellShape(swell, span, tight) {
+    if (!swell || !(span >= SWELL_MIN_NOTE)) return null;
+    const depth = Math.min(SWELL_MAX_DB, Number(swell.depth));
+    const peak = Math.min(0.85, Math.max(0.15, Number(swell.peak)));
+    if (!(depth >= 0.3) || !Number.isFinite(peak)) return null;
+    const lo = Math.pow(10, -depth / 20);
+    const hi = Math.pow(10, -(tight ? depth / 2 : depth) / 20);
+    return { lo, hi, peakAt: span * peak };
+  }
+
   /**
    * Where the recorded attack ends: the first 10 ms window whose RMS reaches half
    * (-6 dB) of the loudest window in the first 1.5 s, capped at 0.3 s.
@@ -317,7 +337,13 @@
      *           the sample starts after its recorded attack, with a short fade-in, as a
      *           note changed under one bow / breath is not attacked again;
      *   tight – a slurred note follows: release quickly, so two pitches do not blur;
-     *   keyboard – a struck instrument: always its full attack.
+     *   keyboard – a struck instrument: always its full attack, and no swell;
+     *   swell – messa di voce {depth dB, peak 0..1}: the note starts `depth` dB under its
+     *           level, reaches it at `peak` of its length and diminishes again before
+     *           the release (exponential ramps: even in dB). Never above the level, so
+     *           peaks and the limiter are unchanged. Not on keyboards, the organ
+     *           (sustainSecs) or short (natural) samples.
+     * Returns true when the note was swelled.
      */
     triggerAttackRelease(pitch, duration, time, gain = 1, velocity = 90, phrasing = null) {
       if (this.disposed) return;
@@ -351,9 +377,19 @@
       source.playbackRate.value = rate;
 
       const env = raw.createGain();
+      const canSwell = !this.natural && !this.sustainSecs && !(phrasing && phrasing.keyboard) && level > 0 && Number.isFinite(level);
+      const sw = canSwell && phrasing && phrasing.swell ? swellShape(phrasing.swell, end - (start + attack), phrasing.tight) : null;
       env.gain.setValueAtTime(0, start);
-      env.gain.linearRampToValueAtTime(level, start + attack);
-      env.gain.setValueAtTime(level, end);
+      if (sw) {
+        // soft start -> full level at the peak -> diminuendo, then the usual release
+        const peakTime = start + attack + sw.peakAt;
+        env.gain.linearRampToValueAtTime(level * sw.lo, start + attack);
+        env.gain.exponentialRampToValueAtTime(level, peakTime);
+        env.gain.exponentialRampToValueAtTime(level * sw.hi, end);
+      } else {
+        env.gain.linearRampToValueAtTime(level, start + attack);
+        env.gain.setValueAtTime(level, end);
+      }
       env.gain.setTargetAtTime(0, end, release / 4);
 
       source.connect(env);
@@ -367,6 +403,7 @@
         this.active.delete(voice);
         try { env.disconnect(); } catch (e) { /* already gone */ }
       };
+      return !!sw;
     }
 
     /** Fade out and stop every sounding or scheduled note. */
@@ -375,7 +412,10 @@
       const t = Math.max(time ?? raw.currentTime, raw.currentTime);
       this.active.forEach(({ source, env }) => {
         try {
-          env.gain.cancelScheduledValues(t);
+          // Hold the value reached at t: cancelling in the middle of a long ramp (a
+          // swell) would snap the gain back to the ramp's start value, a click
+          if (typeof env.gain.cancelAndHoldAtTime === 'function') env.gain.cancelAndHoldAtTime(t);
+          else env.gain.cancelScheduledValues(t);
           env.gain.setTargetAtTime(0, t, 0.03);
           source.stop(t + 0.15);
         } catch (e) { /* not started yet or already stopped */ }
@@ -429,7 +469,7 @@
    * One voice of a VSCO style with all its articulations: a LayeredSampler per
    * articulation, created (and its files loaded) only for the articulations the
    * piece actually uses. triggerAttackRelease takes as 6th argument the articulation
-   * name, or { art, solo, slur, tight } (see LayeredSampler.triggerAttackRelease).
+   * name, or { art, solo, slur, tight, swell } (see LayeredSampler.triggerAttackRelease).
    */
   class ArticulatedSampler {
     /**
@@ -538,7 +578,10 @@
     triggerAttackRelease(pitch, duration, time, gain = 1, velocity = 90, play = 'sustain') {
       if (this.disposed) return;
       const p = typeof play === 'string' ? { art: play } : { ...(play || {}) };
-      if (this.style.keyboard) p.slur = p.tight = false;  // a hammer always strikes
+      if (this.style.keyboard) {
+        p.slur = p.tight = false;  // a hammer always strikes
+        p.swell = null;            // and a struck note cannot swell
+      }
       const art = p.art || 'sustain';
       const solo = !!p.solo;
       const midi = noteToMidi(pitch);
@@ -549,8 +592,12 @@
       const label = r.short ? 'short' : r.key;
       this.counts[label] = (this.counts[label] || 0) + 1;
       if (p.slur && !r.short && !sampler.natural) this.counts.slurred = (this.counts.slurred || 0) + 1;
-      sampler.triggerAttackRelease(pitch, r.short ? shortLength(duration) : duration, time, gain, velocity,
-        r.short ? { keyboard: !!this.style.keyboard } : { slur: p.slur, tight: p.tight, keyboard: !!this.style.keyboard });
+      // A swell only on a sustained sample (not on a cut 'short' note nor a natural one)
+      const swell = p.swell && !r.short && !sampler.natural ? p.swell : null;
+      const swelled = sampler.triggerAttackRelease(pitch, r.short ? shortLength(duration) : duration, time, gain, velocity,
+        r.short ? { keyboard: !!this.style.keyboard } : { slur: p.slur, tight: p.tight, keyboard: !!this.style.keyboard, swell });
+      if (swelled === true) this.counts.swelled = (this.counts.swelled || 0) + 1;
+      return swelled === true;
     }
 
     releaseAll(time) {
