@@ -8,7 +8,10 @@
  *   - per-sample gain (dB) from the catalog: carrilion normalizes the layers to
  *     the same level, so the layer gives the TIMBRE and the player's velocity
  *     gain curve gives the LOUDNESS,
- *   - lazy loading: only the files a given piece needs are fetched (prepare()).
+ *   - lazy loading: only the files a given piece needs are fetched (prepare()),
+ *   - SFZ keyboards (/api/sfz, VCSL harpsichords): stacked registers (`stack`, e.g.
+ *     8' + 4'), region start offsets, and release samples (`releases`) played at the
+ *     end of each note at a fixed level (createSfzStyleSamplers).
  *
  * Decoded buffers are shared by all samplers through a small LRU cache, so the
  * kiosk does not refetch the same files piece after piece.
@@ -121,6 +124,7 @@
   const levelCache = new WeakMap();  // AudioBuffer -> peak 100 ms RMS (first 2 s)
   const TAKE_MATCH_LIMIT = 2;        // takes within ±6 dB of the main one are used
   let roundRobinsOn = true;          // off only for A/B checks (setRoundRobins)
+  let releasesOn = true;             // release samples; off only for A/B checks (setReleaseSamples)
 
   function peakRms(buffer) {
     if (levelCache.has(buffer)) return levelCache.get(buffer);
@@ -198,6 +202,21 @@
       this.layerCenter = opts.layerCenter ?? 82;
       this.layerSpread = opts.layerSpread ?? 1.9;
       this.natural = !!opts.natural;
+      // A struck / plucked keyboard (harpsichord): every note gets its full attack, never
+      // a slur, a tight release or a swell, whatever the phrasing asks for
+      this.keyboard = !!opts.keyboard;
+      // Release samples (SFZ trigger=release: the harpsichord's jack and damper falling
+      // back when the key comes up), played at the end of each note, `releaseTrimDb`
+      // under the level the .sfz gives them. Fixed level: the plectrum has no dynamics.
+      this.releaseTrim = Math.pow(10, (opts.releaseTrimDb ?? 0) / 20);
+      this.releaseZones = new Map();  // midi -> release entry {path, root, gain, offset?, maxSecs?, stack?}
+      if (opts.releases !== false) {
+        for (const [name, rel] of Object.entries(detail.releases || {})) {
+          const midi = noteToMidi(name);
+          if (midi !== null && rel && rel.path) this.releaseZones.set(midi, rel);
+        }
+      }
+      this.releaseInfo = { played: 0, skipped: 0, files: 0 };
       // Recorded sustain before the sample's own decay (s, at the root pitch): a longer
       // note is cut there with the normal release, instead of fading with the recording
       // (organ pipes hold as long as the key is down; their samples do not)
@@ -206,6 +225,7 @@
       this.rr = new Map();        // main path -> { takes: [paths], next } (round robins in use)
       this.takeGain = new Map();  // alternate take path -> linear level match to the main take
       this.rrCounts = {};         // take index -> notes played (for checks)
+      this.counts = {};           // notes played: sustain, stacked (for checks, as ArticulatedSampler)
       this.active = new Set();    // { source, gain } of sounding / scheduled notes
       this.disposed = false;
 
@@ -214,7 +234,8 @@
       for (const [name, sample] of Object.entries(detail.samples || {})) {
         const midi = noteToMidi(name);
         if (midi === null || !sample || !sample.path) continue;
-        const layers = (detail.velocity && detail.velocity[name]) || null;
+        // ignoreLayers: one timbre at every velocity (a harpsichord has no dynamics)
+        const layers = (!opts.ignoreLayers && detail.velocity && detail.velocity[name]) || null;
         this.zones.set(midi, {
           main: sample,
           layers: layers && layers.length ? [...layers].sort((a, b) => a.lovel - b.lovel) : null,
@@ -236,6 +257,19 @@
         if (d < bestDist) { bestDist = d; best = k; }
       }
       return best === null ? null : this.zones.get(best);
+    }
+
+    /** The release sample of a MIDI note (exact, else the nearest mapped one), or null. */
+    releaseFor(midi) {
+      if (!this.releaseZones.size) return null;
+      if (this.releaseZones.has(midi)) return this.releaseZones.get(midi);
+      let best = null;
+      let bestDist = Infinity;
+      this.releaseZones.forEach((rel, k) => {
+        const d = Math.abs(k - midi);
+        if (d < bestDist) { bestDist = d; best = rel; }
+      });
+      return best;
     }
 
     /** Whether the sampled range reaches `midi` (within `tolerance` semitones of its ends). */
@@ -263,6 +297,7 @@
      */
     async prepare(notes) {
       const paths = new Set();
+      const relPaths = new Set();   // release samples (a missing one only costs its noise)
       const rrSamples = new Map();  // main path -> sample entry, for the round robins
       if (notes && notes.length) {
         // In time order, to find the notes played again right after themselves
@@ -275,6 +310,13 @@
           const s = this.sampleFor(midi, n.velocity ?? 90);
           if (!s) continue;
           paths.add(s.path);
+          // Stacked registers (8' + 4') and the release samples of the note
+          if (s.stack) s.stack.forEach(x => paths.add(x.path));
+          const rel = this.releaseFor(midi);
+          if (rel) {
+            relPaths.add(rel.path);
+            if (rel.stack) rel.stack.forEach(x => relPaths.add(x.path));
+          }
           // Round robins where the same recording would be heard twice in a row:
           // every short (natural) sample, and repeated notes of sustained ones
           if (roundRobinsOn && s.alts && s.alts.length && (this.natural || (prev && prev.path === s.path))) rrSamples.set(s.path, s);
@@ -283,8 +325,13 @@
       } else {
         for (const z of this.zones.values()) {
           paths.add(z.main.path);
+          if (z.main.stack) z.main.stack.forEach(x => paths.add(x.path));
           if (z.layers) z.layers.forEach(l => paths.add(l.path));
         }
+        this.releaseZones.forEach(rel => {
+          relPaths.add(rel.path);
+          if (rel.stack) rel.stack.forEach(x => relPaths.add(x.path));
+        });
       }
       const altPaths = new Set();
       rrSamples.forEach(s => s.alts.forEach(a => { if (!paths.has(a)) altPaths.add(a); }));
@@ -299,6 +346,12 @@
       await Promise.all([...altPaths].map(p => load(p).catch(err => {
         console.warn(`VSCO round robin unavailable (${p}): ${err.message}`);
       })));
+      // Same for a release sample: the note still plays, without its release noise
+      relPaths.forEach(p => { if (paths.has(p)) relPaths.delete(p); });
+      await Promise.all([...relPaths].map(p => load(p).catch(err => {
+        console.warn(`Release sample unavailable (${p}): ${err.message}`);
+      })));
+      this.releaseInfo.files = [...relPaths].filter(p => this.buffers.has(p)).length;
       rrSamples.forEach((s, main) => {
         const mainBuf = this.buffers.get(main);
         const takes = [main];
@@ -317,7 +370,7 @@
         }
         if (takes.length > 1) this.rr.set(main, { takes, next: 0 });
       });
-      return paths.size + altPaths.size;
+      return paths.size + altPaths.size + this.releaseInfo.files;
     }
 
     /** The take (path) to play for a catalog sample: alternates the round robins in use. */
@@ -347,6 +400,7 @@
      */
     triggerAttackRelease(pitch, duration, time, gain = 1, velocity = 90, phrasing = null) {
       if (this.disposed) return;
+      if (this.keyboard) phrasing = { keyboard: true };
       const midi = noteToMidi(pitch);
       if (midi === null) throw new Error(`Bad pitch ${pitch}`);
       const sample = this.sampleFor(midi, velocity);
@@ -365,7 +419,8 @@
       // A quick note that is not slurred still cannot wait for a slow recorded attack
       // (section violins: ~0.25 s): it starts halfway into it. Long notes keep theirs.
       const quick = !slur && !this.natural && duration < QUICK_NOTE && !(phrasing && phrasing.keyboard);
-      const offset = slur ? attackOffset(buffer) : quick ? attackOffset(buffer) * 0.5 : 0;
+      // (sample.offset: the .sfz start offset of the region, s)
+      const offset = (slur ? attackOffset(buffer) : quick ? attackOffset(buffer) * 0.5 : 0) + (sample.offset > 0 ? sample.offset : 0);
       const attack = offset > 0 ? Math.max(this.attack, SLUR_FADE) : this.attack;
       const release = phrasing && phrasing.tight && !this.natural ? Math.min(this.release, TIGHT_RELEASE) : this.release;
       let length = this.natural ? buffer.duration / rate - this.release : duration;
@@ -403,7 +458,86 @@
         this.active.delete(voice);
         try { env.disconnect(); } catch (e) { /* already gone */ }
       };
+      this.counts.sustain = (this.counts.sustain || 0) + 1;
+
+      // Stacked registers (e.g. the 4' over the 8'): same key, same moment, same release
+      if (sample.stack && level > 0 && Number.isFinite(level)) {
+        for (const x of sample.stack) {
+          const bx = this.buffers.get(x.path);
+          if (!bx) continue;
+          const lx = gain * this.trim * Math.pow(10, (x.gain || 0) / 20);
+          const rx = Math.pow(2, (midi - (x.root ?? midi)) / 12);
+          if (this.playPlain(bx, rx, start, x.offset > 0 ? x.offset : 0, lx, attack, end, release)) {
+            this.counts.stacked = (this.counts.stacked || 0) + 1;
+          }
+        }
+      }
+
+      // Release sample when the key comes up: at the end of the note, fixed level
+      if (this.releaseZones.size && releasesOn) this.playRelease(midi, end);
       return !!sw;
+    }
+
+    /**
+     * One buffer with a plain envelope (attack ramp, hold, exponential release), tracked
+     * in `active` so releaseAll silences it too. Returns false if anything is not finite.
+     */
+    playPlain(buffer, rate, start, offset, level, attack, end, release) {
+      if (![rate, start, offset, level, attack, end, release].every(Number.isFinite) || !(level > 0) || !(rate > 0) || end <= start) return false;
+      const raw = Tone.getContext().rawContext;
+      const source = raw.createBufferSource();
+      source.buffer = buffer;
+      source.playbackRate.value = rate;
+      const env = raw.createGain();
+      env.gain.setValueAtTime(0, start);
+      env.gain.linearRampToValueAtTime(level, Math.min(end, start + attack));
+      env.gain.setValueAtTime(level, end);
+      env.gain.setTargetAtTime(0, end, release / 4);
+      source.connect(env);
+      env.connect(this.output);
+      source.start(start, Math.min(Math.max(0, offset), buffer.duration * 0.5));
+      source.stop(end + release * 1.5);
+      const voice = { source, env };
+      this.active.add(voice);
+      source.onended = () => {
+        this.active.delete(voice);
+        try { env.disconnect(); } catch (e) { /* already gone */ }
+      };
+      return true;
+    }
+
+    /** The release sample(s) of a key (and of its stacked registers), starting at `time`. */
+    playRelease(midi, time) {
+      const rel = this.releaseFor(midi);
+      if (!rel) return;
+      let played = false;
+      for (const r of [rel, ...(rel.stack || [])]) {
+        const buffer = this.buffers.get(r.path);
+        if (!buffer) continue;
+        const rate = Math.pow(2, (midi - (r.root ?? midi)) / 12);
+        const offset = r.offset > 0 ? r.offset : 0;
+        // The recording to its end, or the .sfz's own fade (ampeg_sustain=0 + decay)
+        let length = buffer.duration / rate - offset;
+        if (r.maxSecs > 0) length = Math.min(length, r.maxSecs);
+        const level = this.trim * this.releaseTrim * Math.pow(10, (r.gain || 0) / 20);
+        const attack = r.attack > 0 ? r.attack : 0.004;
+        if (this.playPlain(buffer, rate, time, offset, level, attack, time + Math.max(0.02, length - 0.05), 0.05)) played = true;
+      }
+      if (played) this.releaseInfo.played++;
+      else this.releaseInfo.skipped++;
+    }
+
+    /** Round robins in use ({ sustain: {...} }, same shape as ArticulatedSampler's). */
+    roundRobinStats() {
+      if (!this.rr.size && !Object.keys(this.rrCounts).length && !this.rejectedTakes) return {};
+      return {
+        sustain: {
+          samples: this.rr.size,
+          rejected: this.rejectedTakes || 0,
+          takes: { ...this.rrCounts },
+          gainsDb: [...this.takeGain.values()].map(g => Math.round(200 * Math.log10(g)) / 10),
+        },
+      };
     }
 
     /** Fade out and stop every sounding or scheduled note. */
@@ -662,6 +796,51 @@
     });
   }
 
+  // ---- SFZ keyboards (VCSL harpsichords, server/sfz.js) -----------------------------
+  const sfzCache = new Map();  // "lib|file" -> Promise<detail>
+
+  function fetchSfz(lib, file) {
+    const key = `${lib}|${file}`;
+    if (!sfzCache.has(key)) {
+      const p = fetch(`/api/sfz?lib=${encodeURIComponent(lib)}&file=${encodeURIComponent(file)}`).then(r => {
+        if (!r.ok) throw new Error(`SFZ ${lib} / ${file}: ${r.status}`);
+        return r.json();
+      });
+      p.catch(() => sfzCache.delete(key));
+      sfzCache.set(key, p);
+    }
+    return sfzCache.get(key);
+  }
+
+  let sfzStatus = null;
+  /** The .sfz files the server can serve ({ available, files }), cached. */
+  function sfzAvailability() {
+    if (!sfzStatus) {
+      sfzStatus = fetch('/api/sfz/status')
+        .then(r => (r.ok ? r.json() : { available: false, files: [] }))
+        .catch(() => ({ available: false, files: [] }));
+    }
+    return sfzStatus;
+  }
+
+  /**
+   * The four samplers of an SFZ keyboard style (style.sfz = { lib, file }): one
+   * LayeredSampler per voice (own panner), all reading the same decoded buffers.
+   * Keyboard phrasing, no velocity layers, release samples. No files yet: prepare(notes).
+   */
+  async function createSfzStyleSamplers(style) {
+    const detail = await fetchSfz(style.sfz.lib, style.sfz.file);
+    const env = detail.envelope || {};
+    return [0, 1, 2, 3].map(() => new LayeredSampler(detail, {
+      attack: style.attack ?? env.attack ?? 0.004,
+      release: style.release ?? env.release ?? 0.4,
+      trimDb: style.trimDb ?? 0,
+      keyboard: true,
+      ignoreLayers: true,
+      releaseTrimDb: style.releaseTrimDb ?? 0,
+    }));
+  }
+
   /**
    * Articulations a style really plays (for the articulation plan and its labels):
    * those every voice has, plus 'solo' if any voice has a solo instrument.
@@ -683,5 +862,8 @@
   window.createLayeredStyleSamplers = createLayeredStyleSamplers;
   window.createContinuoSampler = createContinuoSampler;
   window.isVscoAvailable = isVscoAvailable;
+  window.createSfzStyleSamplers = createSfzStyleSamplers;
+  window.sfzAvailability = sfzAvailability;
+  window.setReleaseSamples = on => { releasesOn = !!on; };  // for A/B checks (from now on)
   window.noteToMidi = noteToMidi;
 })();

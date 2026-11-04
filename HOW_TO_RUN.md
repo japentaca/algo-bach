@@ -40,6 +40,15 @@ API endpoints:
 - `GET /api/vsco/articulation?instrument=Violin&articulation=Spiccato` → sample map and
   velocity layers of one articulation. Each sample/layer may carry `alts`: the other
   round-robin takes of that note found on disk (`_rr1/_rr2`, `_RR1/_RR2`, `_1/_2`).
+- `GET /api/sfz/status` → `{ available, files }` (the whitelisted `.sfz` instruments
+  found in `SOUNDFONTS_DIR/VCSL-Keys`)
+- `GET /api/sfz?lib=VCSL-Keys&file=Harpsichord, Flemish - 8'.sfz` → the same shape as
+  `/api/vsco/articulation` (`baseUrl`, `samples` per note with `root` / `gain`, `velocity`,
+  `alts`), plus `stack` (regions sounding together, e.g. the 4' over the 8'), `offset` (s),
+  `releases` (the release samples per note), `envelope` and `info` (region counts). Only
+  the files listed in `SFZ_LIBRARIES` (server/app.js) can be read; each is parsed once
+  (server/sfz.js: `<control>/<global>/<master>/<group>/<region>` inheritance,
+  `default_path`, comments, `seq_position` round robins; key-switch files are not used).
 
 The player alternates those takes on every short (staccato/pizzicato) sample and on
 repeated notes of sustained ones, matching each take's level to the main one (peak
@@ -58,7 +67,7 @@ the other forms, or for non-VSCO styles. Checks: `BachPlayer.continuoStats()` (n
 planned / played per section, files loaded, `outsideTutti` = 0, `log` of the organ
 notes' beats); `setContinuo(false)` turns it off for the next piece (A/B tests).
 
-**Messa di voce** (VSCO styles except VscoPiano; Tone output only): the articulation plan
+**Messa di voce** (VSCO styles; Tone output only): the articulation plan
 (`public/articulation.js`) marks a few long sustained notes (≥ 1.2 s at the current
 tempo, never slurred, staccato, pizzicato or tremolo) to be begun softly, swelled and
 diminished, as an ornament that goes with the vibrato: the final chord (all voices
@@ -100,6 +109,23 @@ no settings). Checks: `BachPlayer.lastArticulationPlan()` (`voiceProfiles` = wha
 voice plays, `voiceRequested`, `voiceSummary` per voice, `sections[].voiceCharacters`),
 the `articulation.voiceProfiles` returned by `generateAndPlay`, and
 `BachPlayer.articulationStats()` (notes played per voice and articulation).
+
+**Harpsichords** (styles `HarpsichordFull` = Flemish 8' + 4', `Harpsichord8` = Flemish 8'):
+samples from Versilian Studios' **VCSL Keys** (CC0, public domain), not part of this repo:
+put the `VCSL-Keys` folder in carrilion's `assets/soundfonts` (or `SOUNDFONTS_DIR`); the
+options stay disabled without it. The Flemish instrument was chosen by measuring all 8 VCSL
+harpsichords (evenness, tuning, decay, release samples); see the comment in
+`public/instrumentConfig.js`. A harpsichord has no dynamics: the velocity curve is almost
+flat (±1 dB) and there are no velocity layers; every note gets its full pluck (never
+slurred or swelled), there is no organ continuo, and at the end of each note its release
+sample (the jack falling back, ~26 dB under the pluck, as the .sfz sets it) is played. One
+string per key: two voices on the same key at once are one pluck, and a key struck again
+while held is released 20 ms before. The final chord and cadence chords (3+ voices, held
+≥ 1.5 beats) are rolled from the bass up (35 / 18 ms per note). Checks:
+`BachPlayer.releaseStats()` (release samples played / skipped and files per voice),
+`BachPlayer.arpeggioStats()` (`rolled`, `unison`, `restruck`, `log`),
+`BachPlayer.articulationStats()` (`sustain` / `stacked` notes); `setReleaseSamples(false)`
+turns the release samples off (A/B tests).
 
 ## Parameters
 

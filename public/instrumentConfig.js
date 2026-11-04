@@ -282,42 +282,6 @@ const INSTRUMENT_SAMPLES = {
       'C#4': 'tuba-sus-cSHARP4.mp3',
     }
   },
-  'Grand Piano': {
-    displayName: 'Grand Piano',
-    range: 'C1-C8',
-    baseUrl: 'Orchestra/Grand_Piano/',
-    samples: {
-      'C1': 'piano-p-c1.mp3',
-      'C2': 'piano-p-c2.mp3',
-      'C3': 'piano-p-c3.mp3',
-      'C4': 'piano-p-c4.mp3',
-      'C5': 'piano-p-c5.mp3',
-      'C6': 'piano-p-c6.mp3',
-      'C7': 'piano-p-c7.mp3',
-      'C8': 'piano-p-c8.mp3',
-      'A1': 'piano-p-a1.mp3',
-      'A2': 'piano-p-a2.mp3',
-      'A3': 'piano-p-a3.mp3',
-      'A4': 'piano-p-a4.mp3',
-      'A5': 'piano-p-a5.mp3',
-      'A6': 'piano-p-a6.mp3',
-      'A7': 'piano-p-a7.mp3',
-      'D#1': 'piano-p-dSHARP1.mp3',
-      'D#2': 'piano-p-dSHARP2.mp3',
-      'D#3': 'piano-p-dSHARP3.mp3',
-      'D#4': 'piano-p-dSHARP4.mp3',
-      'D#5': 'piano-p-dSHARP5.mp3',
-      'D#6': 'piano-p-dSHARP6.mp3',
-      'D#7': 'piano-p-dSHARP7.mp3',
-      'F#1': 'piano-p-fSHARP1.mp3',
-      'F#2': 'piano-p-fSHARP2.mp3',
-      'F#3': 'piano-p-fSHARP3.mp3',
-      'F#4': 'piano-p-fSHARP4.mp3',
-      'F#5': 'piano-p-fSHARP5.mp3',
-      'F#6': 'piano-p-fSHARP6.mp3',
-      'F#7': 'piano-p-fSHARP7.mp3',
-    }
-  },
   'Harp': {
     displayName: 'Harp',
     range: 'C2-C7',
@@ -356,10 +320,6 @@ const STYLE_PRESETS = {
     displayName: 'Strings (Quartet)',
     instruments: ['Violin', 'Violas', 'Cello', 'Basses']
   },
-  'Piano': {
-    displayName: 'Piano (Solo)',
-    instruments: ['Grand Piano', 'Grand Piano', 'Grand Piano', 'Grand Piano']
-  },
   'Woodwinds': {
     displayName: 'Woodwinds (Quartet)',
     instruments: ['Flute', 'Oboe', 'Clarinet', 'Bassoon']
@@ -375,6 +335,45 @@ const STYLE_PRESETS = {
   'Harp': {
     displayName: 'Harp (Solo)',
     instruments: ['Harp', 'Harp', 'Harp', 'Harp']
+  },
+
+  // ---- Harpsichords (VCSL Keys by Versilian Studios, CC0, read from their .sfz) ----
+  // The continuo and solo keyboard of Bach's time, in place of the pianos. Engine
+  // 'sfz': server/sfz.js maps the .sfz (/api/sfz), layeredSampler.js plays it with
+  // the release samples (jack and damper falling back when a key comes up).
+  // Instrument chosen by measuring the decoded samples of the 8 VCSL harpsichord
+  // .sfz files (C2-A#5, peak 100 ms RMS of the mono sum + the .sfz volume): the
+  // Flemish is the most even (sd 1.7 dB, largest step between neighbouring samples
+  // 3.1 dB; Italian sd 3.1 and +9 dB from bass to treble, French and Unk 7 dB holes)
+  // and the best in tune (every note within +2..+9 cents; Italian spreads over 16
+  // cents), decays slowly (-20 dB in 2 s, -40 dB in 5 s) and has release samples for
+  // every note ~26 dB under the pluck. No round robins (one take per note; a
+  // plectrum is mechanically repeatable). Two registrations of the same instrument,
+  // as a player would choose them: 8' alone (the usual continuo / cantabile stop)
+  // and 8' + 4' (the 4' an octave up, ~2 dB under the 8', for a brilliant tutti).
+  // No dynamics: velocityExponent flattens the player's velocity curve; expression
+  // comes from articulation, timing and the arpeggiando (s per note, bass up) of the
+  // final and cadence chords. Keyboard rules: never slurred or swelled, no organ
+  // continuo, no pizzicato. trimDb: level-matched in playback to the old Piano.
+  'HarpsichordFull': {
+    displayName: "Harpsichord, Flemish (8' + 4')",
+    engine: 'sfz',
+    keyboard: true,
+    sfz: { lib: 'VCSL-Keys', file: "Harpsichord, Flemish - Full.sfz" },
+    trimDb: 4,  // old Piano level (mean of Prelude / Chorale / Fugue, same seed)
+    releaseTrimDb: 0,
+    velocityExponent: 0.25,
+    arpeggiando: { final: 0.035, cadence: 0.018 },
+  },
+  'Harpsichord8': {
+    displayName: "Harpsichord, Flemish (8')",
+    engine: 'sfz',
+    keyboard: true,
+    sfz: { lib: 'VCSL-Keys', file: "Harpsichord, Flemish - 8'.sfz" },
+    trimDb: 5,  // ~1 dB under the 8' + 4' (one register less), within 1 dB of the old Piano
+    releaseTrimDb: 0,
+    velocityExponent: 0.25,
+    arpeggiando: { final: 0.035, cadence: 0.018 },
   },
 
   // ---- Velocity-layered styles (VSCO 2 CE samples served from carrilion) ----
@@ -403,17 +402,9 @@ const STYLE_PRESETS = {
   // the bass (E2–C4) is inside the manual (C2–C7); a 16' manual is not sampled.
   // trimDb is relative to the style's trimDb, set in playback for ~+1 dB in the tutti
   // (section RMS with / without organ, same seed, both orders); the solos are unchanged.
-  // Not for VscoPiano (a keyboard is its own continuo) nor VscoBrass (the trombone bass
+  // Not for the harpsichords (a keyboard is its own continuo) nor VscoBrass (the trombone bass
   // masks it: +0.2 dB at the strings' organ level, with the mix already ~2 dB under the
   // limiter).
-  'VscoPiano': {
-    displayName: 'VSCO Upright Piano (5 velocity layers)',
-    engine: 'vsco',
-    keyboard: true,
-    release: 0.45,
-    trimDb: 6,  // level-matched to the Grand Piano style (measured RMS)
-    vsco: Array(4).fill({ instrument: 'VSUpright1', articulation: 'Default' }),
-  },
   'VscoWoodwinds': {
     displayName: 'VSCO Woodwinds (2-3 velocity layers)',
     engine: 'vsco',

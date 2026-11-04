@@ -33,6 +33,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // a keyboard style, the organ or MIDI.
   let messaOn = true;        // off only for A/B checks (setMessaDiVoce, next piece)
   let swellInfo = null;      // stats of the current / last piece (swellStats)
+  let keyboardInfo = null;   // harpsichord touch of the current / last piece (arpeggioStats)
   let monoModes = [false, false, false, false];  // Monophonic mode state for each voice
   let limiter;
   let convolver;  // Convolver node for reverb
@@ -56,7 +57,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // from the keyboard (treble right, bass left), narrower.
   const ENSEMBLE_PANS = [-0.55, -0.2, 0.2, 0.45];
   const KEYBOARD_PANS = [0.35, 0.12, -0.12, -0.35];
-  const KEYBOARD_STYLES = ['Piano', 'Harp'];
+  const KEYBOARD_STYLES = ['Harp', 'HarpsichordFull', 'Harpsichord8'];
   let panOverride = null;  // set by setStereoLayout (kiosk); null = style default
 
   function currentPans(styleName) {
@@ -230,6 +231,93 @@ document.addEventListener('DOMContentLoaded', () => {
     if (info.log.length < 4000) info.log.push([+ev.beat.toFixed(3), +(ev.beat + ev.beats).toFixed(3)]);
   }
 
+  // ---- Harpsichord touch ---------------------------------------------------
+  const KEY_GAP = 0.02;    // s between a key coming up and the same key plucked again
+  const UNISON_SECS = 0.025;  // two voices on one key within this: a single pluck
+
+  /**
+   * What a harpsichordist does with the written notes (SFZ keyboard styles only):
+   * - arpeggiando: the final chord and the chord each cadence arrives on (>= 3 voices
+   *   struck together, all held >= 1.5 beats and >= 0.6 s) are rolled from the bass up,
+   *   `style.arpeggiando.final` / `.cadence` s per note; ends are kept, so the chord
+   *   still releases together. Deterministic (the rolled notes lose their random
+   *   humanizing); notes on the same key keep the same moment.
+   * - one string per key: two voices on the same key at the same moment are one pluck
+   *   (the later event is skipped, the held one lasts as long as the longer); a key
+   *   struck again while still held is released KEY_GAP s before (the jack must fall
+   *   back — and its release sample is heard — before it can pluck again).
+   * Mutates `events` (at, dur, skip); returns the stats (arpeggioStats).
+   */
+  function harpsichordTouch(events, data, secsPerBeat, style, beatsOf) {
+    const info = { rolled: 0, rolledNotes: 0, unison: 0, restruck: 0, log: [] };
+    const arp = style.arpeggiando;
+    if (arp) {
+      // Onsets carry a few thousandths of a beat of jitter (115.993 / 116.005 are one
+      // chord): grouped by 1/20 beat (a 32nd note is 1/8)
+      const groups = new Map();  // onset (1/20 beat) -> events
+      events.forEach(ev => {
+        const k = Math.round(data.notes[ev.i].startTime * 20);
+        if (!groups.has(k)) groups.set(k, []);
+        groups.get(k).push(ev);
+      });
+      const chords = [];
+      groups.forEach((evs, k) => {
+        const minBeats = Math.min(...evs.map(e => beatsOf(data.notes[e.i])));
+        if (new Set(evs.map(e => e.voice)).size >= 3 && minBeats >= 1.5 && minBeats * secsPerBeat >= 0.6) chords.push(k);
+      });
+      chords.sort((a, b) => a - b);
+      const targets = new Map();  // onset -> [step s, kind]
+      const lastOnset = Math.max(...groups.keys());
+      if (chords.length && chords[chords.length - 1] === lastOnset) targets.set(lastOnset, [arp.final, 'final']);
+      ((data.meta && data.meta.phraseMarkers) || []).forEach(pm => {
+        if (!pm || !pm.cadence || !Number.isFinite(pm.endBeat)) return;
+        const end = Math.round(pm.endBeat * 20);
+        const cand = chords.filter(k => k < end && k >= end - 80);  // within the last bar
+        const k = cand[cand.length - 1];
+        if (k !== undefined && !targets.has(k)) targets.set(k, [arp.cadence, pm.cadence]);
+      });
+      targets.forEach(([step, kind], k) => {
+        if (!(step > 0)) return;
+        const evs = groups.get(k);
+        const keys = [...new Set(evs.map(e => noteToMidi(e.pitch)))].sort((a, b) => a - b);
+        const base = Math.min(...evs.map(e => e.at));
+        evs.forEach(e => {
+          const endAt = e.at + e.dur;
+          e.at = base + keys.indexOf(noteToMidi(e.pitch)) * step;
+          e.dur = Math.max(0.1, endAt - e.at);
+        });
+        info.rolled++;
+        info.rolledNotes += evs.length;
+        if (info.log.length < 500) info.log.push([k / 20, kind, Math.round(step * 1000), keys.length]);
+      });
+    }
+    const byKey = new Map();
+    events.forEach(ev => {
+      const m = noteToMidi(ev.pitch);
+      if (m === null) return;
+      if (!byKey.has(m)) byKey.set(m, []);
+      byKey.get(m).push(ev);
+    });
+    byKey.forEach(list => {
+      list.sort((a, b) => a.at - b.at);
+      let held = null;
+      for (const ev of list) {
+        if (held && ev.at - held.at < UNISON_SECS) {
+          held.dur = Math.max(held.dur, ev.at + ev.dur - held.at);
+          ev.skip = true;
+          info.unison++;
+          continue;
+        }
+        if (held && ev.at < held.at + held.dur + KEY_GAP) {
+          held.dur = Math.max(0.03, ev.at - held.at - KEY_GAP);
+          info.restruck++;
+        }
+        held = ev;
+      }
+    });
+    return info;
+  }
+
   // Seed generation function
   function generateUniqueSeed() {
     return 'seed_' + Date.now().toString(36) + '_' + Math.random().toString(36).substr(2, 9);
@@ -331,6 +419,23 @@ document.addEventListener('DOMContentLoaded', () => {
           }
         });
         console.log(`VSCO velocity-layered styles ${available ? 'enabled' : 'unavailable'}`);
+      });
+    }
+    // SFZ keyboards (VCSL harpsichords): enabled only if the server has their .sfz file
+    if (typeof sfzAvailability === 'function') {
+      sfzAvailability().then(status => {
+        const files = new Set((status && status.files) || []);
+        let enabled = 0;
+        Array.from(styleSelect.options).forEach(opt => {
+          const preset = STYLE_PRESETS[opt.value];
+          if (preset && preset.engine === 'sfz') {
+            const ok = files.has(preset.sfz.file);
+            opt.disabled = !ok;
+            opt.title = ok ? '' : `${preset.sfz.lib} samples not found (set SOUNDFONTS_DIR on the server)`;
+            if (ok) enabled++;
+          }
+        });
+        console.log(`SFZ keyboard styles enabled: ${enabled}`);
       });
     }
   }
@@ -583,7 +688,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
     try {
       let loadedSamplers;
-      if (style.engine === 'vsco') {
+      if (style.engine === 'sfz') {
+        // SFZ keyboard (harpsichord): only the files (note, stacked register, release) the piece uses
+        loadedSamplers = await createSfzStyleSamplers(style);
+        const counts = await Promise.all(loadedSamplers.map((s, i) =>
+          s.prepare(notes ? notes.filter(n => Math.min(Math.max(n.voice, 0), 3) === i) : null)));
+        console.log(`✓ SFZ files loaded per voice: [${counts.join(', ')}]`);
+      } else if (style.engine === 'vsco') {
         // Velocity-layered samples: fetch only the files (note × layer) this piece uses
         loadedSamplers = await createLayeredStyleSamplers(style);
         // (each note carries its articulation: only the articulations used are loaded)
@@ -899,9 +1010,20 @@ document.addEventListener('DOMContentLoaded', () => {
           // Per-note gain with a squared curve (40·log10(v), the usual MIDI/DLS
           // velocity curve): v=0.55 → -10 dB, v=0.8 → -4 dB, v=1 → 0 dB.
           // Tone applies it as a linear gain on the note's own buffer source.
-          gain: velocity * velocity * (gainMul || 1),
+          // A harpsichord's plectrum plucks at a fixed level: its style flattens the
+          // curve (velocityExponent 0.25 → 5·log10(v): v=0.55 → -1.3 dB) and ignores the
+          // accompaniment's -3 dB (gainMul) — no touch dynamics.
+          gain: Number.isFinite(style.velocityExponent)
+            ? Math.pow(velocity, style.velocityExponent)
+            : velocity * velocity * (gainMul || 1),
         };
       });
+
+      // Harpsichord touch (SFZ keyboard styles, Tone output): rolled cadence / final
+      // chords and one string per key (see harpsichordTouch)
+      keyboardInfo = !useMidi && style.engine === 'sfz'
+        ? harpsichordTouch(events, data, beatDuration * bpmScaleFactor, style, beatsOf)
+        : null;
 
       // Organ events: with the bass note (same humanized onset), an organist's touch.
       // Détaché / pizzicato bass → half length; held notes → slightly lifted, so
@@ -946,6 +1068,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const horizon = clock() + SCHEDULE_AHEAD_SECS;
         while (next < events.length && start + events[next].at <= horizon) {
           const ev = events[next++];
+          if (ev.skip) continue;  // a unison merged into the same key (harpsichordTouch)
           const time = start + ev.at;
           try {
             if (useMidiOut) {
@@ -1068,6 +1191,11 @@ document.addEventListener('DOMContentLoaded', () => {
     } : null),
     // A/B checks: the messa di voce on/off from the next piece
     setMessaDiVoce: (on) => { messaOn = !!on; },
+    // Harpsichord (SFZ keyboard styles): release samples played / skipped per voice and
+    // files loaded; arpeggiando (rolled chords, `log` = [beat, kind, ms per note, keys])
+    // and one-string-per-key counts (unisons merged, keys struck again while held)
+    releaseStats: () => samplers.map(s => (s && s.releaseInfo ? { ...s.releaseInfo } : null)),
+    arpeggioStats: () => (keyboardInfo ? { ...keyboardInfo, log: keyboardInfo.log.map(r => r.slice()) } : null),
   };
   window.setContinuo = window.BachPlayer.setContinuo;
   window.setMessaDiVoce = window.BachPlayer.setMessaDiVoce;

@@ -4,6 +4,7 @@ const path = require('path');
 const app = express();
 const port = 3000;
 const generator = require('../src/main');
+const { parseSfz } = require('./sfz');
 
 app.use(express.json());
 
@@ -81,6 +82,53 @@ app.get('/api/vsco/articulation', (req, res) => {
     samples,
     velocity,
   });
+});
+
+// ---- SFZ instruments (VCSL Keys harpsichords, CC0, served from carrilion) ----
+// Only whitelisted libraries / files can be read (no path from the query reaches the
+// file system). Each .sfz is parsed once and returns the same shape as
+// /api/vsco/articulation, plus `releases` (the release / jack samples per note).
+const SFZ_LIBRARIES = {
+  'VCSL-Keys': [
+    "Harpsichord, Flemish - Full.sfz",
+    "Harpsichord, Flemish - 8'.sfz",
+    "Harpsichord, Flemish - 4'.sfz",
+    'Harpsichord, French.sfz',
+    'Harpsichord, Italian.sfz',
+    'Harpsichord, Unk.sfz',
+    'Harpsichord, English - Normal.sfz',
+    'Harpsichord, English - Lute.sfz',
+  ],
+};
+const sfzCache = new Map();  // "lib|file" -> parsed instrument
+
+function sfzFileOk(lib, file) {
+  return typeof lib === 'string' && typeof file === 'string'
+    && Object.prototype.hasOwnProperty.call(SFZ_LIBRARIES, lib) && SFZ_LIBRARIES[lib].includes(file);
+}
+
+app.get('/api/sfz/status', (req, res) => {
+  const lib = typeof req.query.lib === 'string' ? req.query.lib : 'VCSL-Keys';
+  if (!Object.prototype.hasOwnProperty.call(SFZ_LIBRARIES, lib)) return res.json({ available: false, files: [] });
+  const files = SFZ_LIBRARIES[lib].filter(f => fs.existsSync(path.join(SOUNDFONTS_DIR, lib, f)));
+  res.json({ available: files.length > 0, files });
+});
+
+// ?lib=VCSL-Keys&file=Harpsichord, Italian.sfz
+app.get('/api/sfz', (req, res) => {
+  const { lib, file } = req.query;
+  if (!sfzFileOk(lib, file)) return res.status(404).json({ error: 'not_found' });
+  const key = `${lib}|${file}`;
+  if (!sfzCache.has(key)) {
+    const libDir = path.join(SOUNDFONTS_DIR, lib);
+    try {
+      sfzCache.set(key, parseSfz(path.join(libDir, file), libDir, `soundfonts/${encodeURIComponent(lib)}/`));
+    } catch (error) {
+      console.log(`SFZ not available (${lib} / ${file}): ${error.message}`);
+      return res.status(404).json({ error: 'sfz_unavailable' });
+    }
+  }
+  res.json(sfzCache.get(key));
 });
 
 // API routes BEFORE static middleware

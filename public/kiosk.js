@@ -26,7 +26,9 @@ document.addEventListener('DOMContentLoaded', () => {
     Variations: [72, 116],
     Suite: [76, 126],
   };
-  const TEMPO_SHIFT_BY_STYLE = { Brass: -6, Harp: -4, Piano: 4, VscoBrass: -6, VscoPiano: 4 };
+  // Harpsichords: the piano's +4 — a plucked string dies away (-20 dB in ~2 s), so slow
+  // chorales and held notes need to move on a little
+  const TEMPO_SHIFT_BY_STYLE = { Brass: -6, Harp: -4, VscoBrass: -6, HarpsichordFull: 4, Harpsichord8: 4 };
   // Articulation profile (the "Articulation" selector): mostly the Baroque-practice
   // plan, sometimes one manner for the whole piece. Pizzicato only where the ensemble
   // really plucks (VSCO strings).
@@ -48,18 +50,21 @@ document.addEventListener('DOMContentLoaded', () => {
     'PrimeLong.mp3': [30, 44],
     'PrimeXtraLong.mp3': [26, 38],
   };
-  const REVERB_SHIFT_BY_STYLE = { Strings: 3, Brass: 2, Harp: -3, Piano: -6, VscoBrass: 2, VscoPiano: -6, VscoStrings: 3 };
+  // Harpsichords: drier than the piano's -6. The VCSL samples are the far microphones
+  // (the room is already in them) and a dense, sharp attack in every voice smears under
+  // a long wet tail; the mix still stays >= 18% (PrimeXtraLong's 26-38 minus 8)
+  const REVERB_SHIFT_BY_STYLE = { Strings: 3, Brass: 2, Harp: -3, VscoBrass: 2, VscoStrings: 3, HarpsichordFull: -8, Harpsichord8: -8 };
 
   // Stereo seatings [S, A, T, B] scaled by a random width. Ensembles: the modern stage
   // (high voices left, low voices right) or the antiphonal Baroque seating (the two
-  // upper parts facing each other across the stage). Piano and harp: one instrument,
+  // upper parts facing each other across the stage). Harpsichord and harp: one instrument,
   // heard from the keyboard (treble right), kept narrower.
   const SEATINGS = {
     moderna: { label: 'Disposizione moderna', pans: [-1, -0.35, 0.35, 0.8], weight: 0.65 },
     antifonale: { label: 'Disposizione antifonale', pans: [-1, 1, -0.35, 0.35], weight: 0.35 },
   };
   const KEYBOARD_SEATING = { label: 'Dalla tastiera', pans: [1, 0.35, -0.35, -1] };
-  const KEYBOARD_STYLES = ['Piano', 'Harp', 'VscoPiano'];
+  const KEYBOARD_STYLES = ['Harp', 'HarpsichordFull', 'Harpsichord8'];
 
   // ---- Italianate labels -------------------------------------------------
   const FORM_IT = {
@@ -72,9 +77,10 @@ document.addEventListener('DOMContentLoaded', () => {
   };
   const MODE_IT = { major: 'maggiore', minor: 'minore' };
   const STYLE_IT = {
-    Strings: "Quartetto d'archi", Piano: 'Pianoforte', Woodwinds: 'Quartetto di legni',
+    Strings: "Quartetto d'archi", Woodwinds: 'Quartetto di legni',
     Brass: 'Quartetto di ottoni', Harp: 'Arpa', Mixed: 'Orchestra',
-    VscoPiano: 'Pianoforte verticale (VSCO)', VscoWoodwinds: 'Quartetto di legni (VSCO)',
+    HarpsichordFull: "Clavicembalo fiammingo (8' e 4')", Harpsichord8: "Clavicembalo fiammingo (8')",
+    VscoWoodwinds: 'Quartetto di legni (VSCO)',
     VscoBrass: 'Quartetto di ottoni (VSCO)', VscoStrings: "Quartetto d'archi (VSCO)",
   };
   const AFFETTO_IT = { style: 'Affetto naturale', delicate: 'Dolce', lyrical: 'Cantabile', bold: 'Con fuoco' };
