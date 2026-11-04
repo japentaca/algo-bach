@@ -48,6 +48,16 @@ used. Checks in the browser console: `BachPlayer.roundRobinStats()` (takes playe
 voice and articulation), `BachPlayer.articulationStats()`; `setRoundRobins(false)` turns
 them off for the next piece (A/B tests).
 
+**Continuo organ** (Ritornello, VSCO styles with a `continuo` entry in
+`public/instrumentConfig.js`: VscoStrings and VscoWoodwinds): an organ doubles the bass in the *tutti* sections and
+rests in the solo episodes, as the continuo thins out under the soloist. Stop: the VSCO
+manual `Organ` / `Loud`, an 8' principal at the written pitch (only the files of the
+doubled notes are loaded). Détaché bass notes are played at half length, held ones
+slightly lifted; constant level (pipes have no touch). Not used with MIDI output, for
+the other forms, or for non-VSCO styles. Checks: `BachPlayer.continuoStats()` (notes
+planned / played per section, files loaded, `outsideTutti` = 0, `log` of the organ
+notes' beats); `setContinuo(false)` turns it off for the next piece (A/B tests).
+
 ## Parameters
 
 | Parameter | Values | Default | Description |

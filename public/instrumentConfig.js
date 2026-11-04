@@ -442,6 +442,21 @@ const STYLE_PRESETS = {
   // articulation falls back (pizzicato -> staccato -> shortened sustain, vibrato ->
   // sustain...). The layer of each note is chosen by its velocity (layeredSampler.js).
   // The "Key Switch" entries of the catalog mix several articulations: not used.
+  //
+  // `continuo` (optional): an organ that doubles the bass (voice 3) in the TUTTI
+  // sections of a ritornello and rests in the solo episodes (player.js). The stop is
+  // the VSCO manual 'Organ' / 'Loud' (Rode, Man3 "Open": an 8' principal chorus at
+  // the written pitch): even level over the bass range (±3 dB from C2 to C4), speaks
+  // in ~0.1 s and holds ~10 s before its recorded decay (`sustainSecs`). The other
+  // VSCO organ sets were measured and left out: the quiet manual (a gedackt) varies
+  // by up to 35 dB from note to note, the quiet pedal speaks in up to 0.5 s, and the
+  // loud pedal is a full 16' chorus, too heavy for a continuo positive. 8' doubling:
+  // the bass (E2–C4) is inside the manual (C2–C7); a 16' manual is not sampled.
+  // trimDb is relative to the style's trimDb, set in playback for ~+1 dB in the tutti
+  // (section RMS with / without organ, same seed, both orders); the solos are unchanged.
+  // Not for VscoPiano (a keyboard is its own continuo) nor VscoBrass (the trombone bass
+  // masks it: +0.2 dB at the strings' organ level, with the mix already ~2 dB under the
+  // limiter).
   'VscoPiano': {
     displayName: 'VSCO Upright Piano (5 velocity layers)',
     engine: 'vsco',
@@ -455,6 +470,8 @@ const STYLE_PRESETS = {
     engine: 'vsco',
     release: 0.25,
     trimDb: 11,  // level-matched to the Woodwinds style (measured RMS)
+    // Same absolute organ level as VscoStrings (style trim + continuo trim = 5.5 dB)
+    continuo: { instrument: 'Organ', articulation: 'Loud', trimDb: -5.5, release: 0.12, sustainSecs: 9.5 },
     vsco: [
       {
         instrument: 'FluteSus', articulation: 'Sustain',
@@ -524,6 +541,7 @@ const STYLE_PRESETS = {
     engine: 'vsco',
     release: 0.35,
     trimDb: 9.5,  // level-matched to the Strings style (measured RMS, legato)
+    continuo: { instrument: 'Organ', articulation: 'Loud', trimDb: -4, release: 0.12, sustainSecs: 9.5 },
     vsco: [
       {
         instrument: 'ViolinEnsSus', articulation: 'Sustain Vibrato',

@@ -22,6 +22,11 @@ document.addEventListener('DOMContentLoaded', () => {
   let samplers = [];
   let volumes = [];  // Volume nodes for dynamics control
   let panners = [];  // Panner nodes for stereo placement
+  // Continuo organ (VSCO styles with style.continuo): doubles the bass in the tutti of
+  // a ritornello, rests in the solo episodes. Never with MIDI output.
+  let continuo = null;       // { sampler, volume, panner } of the current piece
+  let continuoOn = true;     // off only for A/B checks (setContinuo, next piece)
+  let continuoInfo = null;   // stats of the current / last piece (continuoStats)
   let monoModes = [false, false, false, false];  // Monophonic mode state for each voice
   let limiter;
   let convolver;  // Convolver node for reverb
@@ -127,12 +132,96 @@ document.addEventListener('DOMContentLoaded', () => {
       });
     }
 
+    disposeContinuo(now);
+
     // Clear arrays
     samplers = [];
     volumes = [];
     panners = [];
 
     console.log("✓ All audio resources disposed");
+  }
+
+  // ---- Continuo organ ------------------------------------------------------
+  /** Release and dispose the organ and its nodes (part of disposeAllAudioResources). */
+  function disposeContinuo(now = Tone.now()) {
+    if (!continuo) return;
+    const { sampler, volume, panner } = continuo;
+    continuo = null;
+    try { sampler.releaseAll(now); } catch (e) { /* ignore */ }
+    try { sampler.dispose(); } catch (e) { /* ignore */ }
+    // The sampler cuts its output 250 ms later (after its fade); its nodes go with it
+    setTimeout(() => {
+      try { volume.dispose(); } catch (e) { /* ignore */ }
+      try { panner.dispose(); } catch (e) { /* ignore */ }
+    }, 300);
+  }
+
+  /**
+   * Which notes the organ doubles: the bass (voice 3) of every tutti section of a
+   * ritornello. Returns null when the piece has no tutti (other forms) or no bass.
+   */
+  function continuoPlan(data, sections) {
+    const tutti = sections
+      .map((s, k) => ({ k, kind: s.kind, startBeat: s.startBeat, endBeat: s.endBeat }))
+      .filter(s => s.kind === 'tutti' && Number.isFinite(s.startBeat) && Number.isFinite(s.endBeat));
+    if (!tutti.length) return null;
+    const notes = [];  // { i, section }
+    data.notes.forEach((n, i) => {
+      if (Math.min(Math.max(n.voice, 0), 3) !== 3) return;
+      // Onsets carry a few thousandths of a beat of jitter: a bass note at 31.998 is the
+      // downbeat of the section starting at 32
+      const t = n.startTime + 0.05;
+      const s = tutti.find(x => t >= x.startBeat && t < x.endBeat);
+      if (s) notes.push({ i, section: s.k });
+    });
+    return notes.length ? { notes, tutti } : null;
+  }
+
+  /** Build the organ and load only the files of the notes it doubles (not connected yet). */
+  async function prepareContinuo(style, data, plan) {
+    const sampler = await createContinuoSampler(style);
+    if (!sampler) return null;
+    if (!Number.isFinite(sampler.trim) || sampler.trim <= 0) {
+      console.warn('Continuo: bad trim, organ left out');
+      return null;
+    }
+    // Notes outside the sampled range are not doubled (the manual reaches C2–C7)
+    const inRange = plan.notes.filter(({ i }) => {
+      const midi = noteToMidi(data.notes[i].pitch);
+      return midi !== null && sampler.covers(midi, 0);
+    });
+    const files = await sampler.prepare(inRange.map(({ i }) => data.notes[i]));
+    return { sampler, files, notes: inRange, outOfRange: plan.notes.length - inRange.length };
+  }
+
+  /** Put the prepared organ into the effects chain, near the bass (the continuo group). */
+  function connectContinuo(sampler, styleName) {
+    const pan = currentPans(styleName)[3] * 0.4;
+    const volume = new Tone.Volume(0);
+    const panner = new Tone.Panner(pan);
+    panner.connect(dryGain);
+    panner.connect(convolver);
+    volume.connect(panner);
+    sampler.connect(volume);
+    continuo = { sampler, volume, panner };
+  }
+
+  /** Play one organ event (from the scheduler). Gains are checked: a NaN would poison the limiter. */
+  function playContinuo(ev, time) {
+    const info = continuoInfo;
+    if (!Number.isFinite(ev.gain) || ev.gain <= 0 || !Number.isFinite(ev.dur) || ev.dur <= 0 || !Number.isFinite(time)) {
+      if (info) info.skipped++;
+      return;
+    }
+    // A pipe has no touch sensitivity: constant level; a keyboard: full attack, no slurs
+    continuo.sampler.triggerAttackRelease(ev.pitch, ev.dur, time, ev.gain, 100, { keyboard: true });
+    if (!info) return;
+    info.played++;
+    const sec = info.sections[ev.section];
+    if (sec) sec.played++;
+    if (!info.tutti.some(s => ev.beat + 0.05 >= s.startBeat && ev.beat + 0.05 < s.endBeat)) info.outsideTutti++;
+    if (info.log.length < 4000) info.log.push([+ev.beat.toFixed(3), +(ev.beat + ev.beats).toFixed(3)]);
   }
 
   // Seed generation function
@@ -403,7 +492,7 @@ document.addEventListener('DOMContentLoaded', () => {
    */
   async function setupSamplers(styleName, notes = null, monoModes = [false, false, false, false]) {
     // Dispose old samplers and audio nodes if they exist
-    if (samplers.length > 0 || volumes.length > 0 || panners.length > 0) {
+    if (samplers.length > 0 || volumes.length > 0 || panners.length > 0 || continuo) {
       console.log("Disposing old audio resources...");
       disposeAllAudioResources();
     }
@@ -473,7 +562,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     activeMidiNotes.clear();
 
-    if (samplers.length > 0 || volumes.length > 0 || panners.length > 0) {
+    if (samplers.length > 0 || volumes.length > 0 || panners.length > 0 || continuo) {
       disposeAllAudioResources();
     }
 
@@ -518,7 +607,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // fetch only the files the piece needs.
       } else {
         // Dispose any existing samplers if switching to MIDI mode
-        if (samplers.length > 0 || volumes.length > 0 || panners.length > 0) {
+        if (samplers.length > 0 || volumes.length > 0 || panners.length > 0 || continuo) {
           console.log("Disposing audio resources for MIDI mode...");
           disposeAllAudioResources();
         }
@@ -581,14 +670,53 @@ document.addEventListener('DOMContentLoaded', () => {
       const artOf = (i) => (artPlan ? artPlan.arts[i] : { art: 'sustain', solo: false, gainMul: 1 });
       if (artPlan) console.log('Articulation plan:', artPlan.profile, artPlan.summary, artPlan.sections.map(s => s.text));
 
+      // Continuo organ: the bass doubled in the tutti of a ritornello (VSCO styles with
+      // a continuo stop, Tone output only)
+      const sections = (artPlan ? artPlan.sections : (data.meta && data.meta.sections)) || [];
+      const wantsOrgan = !useMidi && continuoOn && style.engine === 'vsco' && !!style.continuo
+        && typeof createContinuoSampler === 'function';
+      const organPlan = wantsOrgan ? continuoPlan(data, sections) : null;
+      continuoInfo = {
+        enabled: false,
+        reason: useMidi ? 'midi' : !style.continuo || style.engine !== 'vsco' ? 'style' : !continuoOn ? 'off' : !organPlan ? 'no tutti' : null,
+        stop: style.continuo ? `${style.continuo.instrument} / ${style.continuo.articulation}` : null,
+        files: 0, planned: 0, played: 0, skipped: 0, outOfRange: 0, outsideTutti: 0,
+        tutti: organPlan ? organPlan.tutti : [],
+        sections: sections.map(s => ({ kind: s.kind, startBeat: s.startBeat, endBeat: s.endBeat, planned: 0, played: 0 })),
+        log: [],
+      };
+      let organNotes = null;
+
       if (!useMidi) {
         // Load samplers for selected style (layered styles: only this piece's files and articulations)
         const annotated = data.notes.map((n, i) => ({ ...n, art: artOf(i).art, solo: artOf(i).solo }));
-        const samplerSetupSuccess = await setupSamplers(currentStyle, annotated);
-        if (superseded()) return { ok: false, aborted: true };
-        if (!samplerSetupSuccess) {
+        // The organ loads alongside (only the files of the notes it doubles)
+        const [samplerSetupSuccess, organ] = await Promise.all([
+          setupSamplers(currentStyle, annotated),
+          organPlan
+            ? prepareContinuo(style, data, organPlan).catch(err => {
+              console.warn(`Continuo unavailable: ${err.message}`);
+              return null;
+            })
+            : null,
+        ]);
+        if (superseded() || !samplerSetupSuccess) {
+          if (organ) organ.sampler.dispose();
+          if (superseded()) return { ok: false, aborted: true };
           playBtn.disabled = false;
           return { ok: false, error: new Error(`Could not load samples for ${currentStyle}`) };
+        }
+        if (organ && organ.notes.length) {
+          connectContinuo(organ.sampler, currentStyle);
+          organNotes = organ.notes;
+          Object.assign(continuoInfo, { enabled: true, files: organ.files, planned: organ.notes.length, outOfRange: organ.outOfRange });
+          organ.notes.forEach(({ section }) => { if (continuoInfo.sections[section]) continuoInfo.sections[section].planned++; });
+          console.log(`✓ Continuo organ (${continuoInfo.stop}): ${organ.notes.length} bass notes in ${organPlan.tutti.length} tutti, ${organ.files} files`);
+        } else if (organ) {
+          organ.sampler.dispose();
+          continuoInfo.reason = 'out of range';
+        } else if (organPlan) {
+          continuoInfo.reason = 'unavailable';
         }
       }
 
@@ -600,6 +728,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 <strong>Progression:</strong> ${data.meta.progression}<br>
                 <strong>Expressivity:</strong> ${expressivityPreset} | Random texture: ${randomTexture ? 'on' : 'off'} | Sparse cadences: ${sparseOrnaments ? 'on' : 'off'}<br>
                 <strong>Articulation:</strong> ${artPlan ? `${BachArticulation.PROFILES[artPlan.profile]}${realArticulations ? '' : ' (durations only)'} — ${[...new Set(artPlan.sections.map(s => s.text))].slice(0, 6).join(' · ')}` : 'n/a'}
+                ${continuoInfo.enabled ? `<br><strong>Continuo:</strong> organ (8' principal) doubling the bass in the tutti` : ''}
             `;
 
       const useMidiOut = isMidiEnabled();
@@ -649,7 +778,27 @@ document.addEventListener('DOMContentLoaded', () => {
           // Tone applies it as a linear gain on the note's own buffer source.
           gain: velocity * velocity * (gainMul || 1),
         };
-      }).sort((a, b) => a.at - b.at);
+      });
+
+      // Organ events: with the bass note (same humanized onset), an organist's touch.
+      // Détaché / pizzicato bass → half length; held notes → slightly lifted, so
+      // repeated notes speak again. Never past the end of the tutti.
+      const secsPerBeat = beatDuration * bpmScaleFactor;
+      if (continuo && organNotes) {
+        organNotes.forEach(({ i, section }) => {
+          const note = data.notes[i];
+          const bass = events[i];
+          const beats = beatsOf(note);
+          const len = beats * secsPerBeat;
+          const detached = bass.play.art === 'staccato' || bass.play.art === 'pizzicato';
+          let dur = detached ? Math.max(0.1, len * 0.5) : len - Math.min(0.08, len * 0.12);
+          const sec = sections[section];
+          if (sec) dur = Math.min(dur, (sec.endBeat - note.startTime) * secsPerBeat - 0.02);
+          if (!(dur > 0.05)) return;
+          events.push({ at: bass.at, organ: true, pitch: note.pitch, dur, gain: 1, section, beat: note.startTime, beats });
+        });
+      }
+      events.sort((a, b) => a.at - b.at);
 
       // Just-in-time scheduling: only notes starting within SCHEDULE_AHEAD_SECS are
       // handed to Tone / MIDI. Scheduling a whole piece up front created thousands of
@@ -674,6 +823,8 @@ document.addEventListener('DOMContentLoaded', () => {
                   activeMidiNotes.delete(midiKey);
                 }, ev.dur * 1000);
               }, Math.max(0, (time - clock()) * 1000));
+            } else if (ev.organ) {
+              if (continuo) playContinuo(ev, Math.max(time, Tone.now()));
             } else if (samplers[ev.voice]) {
               // Works for both Tone.Sampler and Tone.PolySynth. A late tick plays the
               // note slightly late instead of dropping it.
@@ -706,15 +857,24 @@ document.addEventListener('DOMContentLoaded', () => {
         playBtn.disabled = false;
       }, durationSecs * 1000);
 
-      // Section timeline (for the kiosk card): seconds from the first note
-      const secsPerBeat = beatDuration * bpmScaleFactor;
+      // Section timeline (for the kiosk card): seconds from the first note; the tutti
+      // where the organ plays say so
+      const organIn = (k) => continuoInfo.enabled && continuoInfo.sections[k] && continuoInfo.sections[k].planned > 0;
       const articulation = artPlan ? {
         profile: artPlan.profile,
         real: realArticulations,
-        sections: artPlan.sections.map(s => ({ ...s, atSecs: s.startBeat * secsPerBeat, endSecs: s.endBeat * secsPerBeat })),
+        sections: artPlan.sections.map((s, k) => ({
+          ...s,
+          text: organIn(k) ? `${s.text} · con organo` : s.text,
+          atSecs: s.startBeat * secsPerBeat,
+          endSecs: s.endBeat * secsPerBeat,
+        })),
       } : null;
+      const continuoSummary = continuoInfo.enabled
+        ? { stop: continuoInfo.stop, notes: continuoInfo.planned, files: continuoInfo.files }
+        : null;
 
-      return { ok: true, data, durationSecs, finished, articulation, startsInSecs: 0.5 };
+      return { ok: true, data, durationSecs, finished, articulation, continuo: continuoSummary, startsInSecs: 0.5 };
 
     } catch (e) {
       console.error(e);
@@ -743,5 +903,18 @@ document.addEventListener('DOMContentLoaded', () => {
     articulationStats: () => samplers.map(s => (s && s.counts ? { ...s.counts } : null)),
     // Round robins in use per voice and articulation (take index -> notes played)
     roundRobinStats: () => samplers.map(s => (s && s.roundRobinStats ? s.roundRobinStats() : null)),
+    // Continuo organ of the current / last piece: notes planned and played (per
+    // section), files loaded, notes played outside a tutti (should be 0), and the
+    // [startBeat, endBeat] of every organ note played (`log`)
+    continuoStats: () => (continuoInfo ? {
+      ...continuoInfo,
+      sounding: !!continuo,
+      tutti: continuoInfo.tutti.map(s => ({ ...s })),
+      sections: continuoInfo.sections.map(s => ({ ...s })),
+      log: continuoInfo.log.slice(),
+    } : null),
+    // A/B checks: the organ on/off from the next piece
+    setContinuo: (on) => { continuoOn = !!on; },
   };
+  window.setContinuo = window.BachPlayer.setContinuo;
 });

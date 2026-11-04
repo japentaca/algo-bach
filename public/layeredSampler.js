@@ -178,6 +178,10 @@
       this.layerCenter = opts.layerCenter ?? 82;
       this.layerSpread = opts.layerSpread ?? 1.9;
       this.natural = !!opts.natural;
+      // Recorded sustain before the sample's own decay (s, at the root pitch): a longer
+      // note is cut there with the normal release, instead of fading with the recording
+      // (organ pipes hold as long as the key is down; their samples do not)
+      this.sustainSecs = opts.sustainSecs > 0 ? opts.sustainSecs : null;
       this.buffers = new Map();   // path -> AudioBuffer (files prepared for this sampler)
       this.rr = new Map();        // main path -> { takes: [paths], next } (round robins in use)
       this.takeGain = new Map();  // alternate take path -> linear level match to the main take
@@ -338,7 +342,8 @@
       const offset = slur ? attackOffset(buffer) : quick ? attackOffset(buffer) * 0.5 : 0;
       const attack = offset > 0 ? Math.max(this.attack, SLUR_FADE) : this.attack;
       const release = phrasing && phrasing.tight && !this.natural ? Math.min(this.release, TIGHT_RELEASE) : this.release;
-      const length = this.natural ? buffer.duration / rate - this.release : duration;
+      let length = this.natural ? buffer.duration / rate - this.release : duration;
+      if (this.sustainSecs && !this.natural) length = Math.min(length, this.sustainSecs / rate - offset);
       const end = start + Math.max(0.02, length);
 
       const source = raw.createBufferSource();
@@ -591,6 +596,26 @@
   }
 
   /**
+   * The continuo organ of a VSCO style (style.continuo), or null if the style has
+   * none or the stop is unavailable. No files yet: call prepare(notes).
+   */
+  async function createContinuoSampler(style) {
+    const spec = style && style.engine === 'vsco' ? style.continuo : null;
+    if (!spec) return null;
+    const detail = await fetchArticulation(spec.instrument, spec.articulation).catch(err => {
+      console.warn(`VSCO continuo unavailable (${spec.instrument} / ${spec.articulation}): ${err.message}`);
+      return null;
+    });
+    if (!detail) return null;
+    return new LayeredSampler(detail, {
+      attack: spec.attack ?? 0.006,
+      release: spec.release ?? 0.12,
+      trimDb: (style.trimDb ?? 0) + (spec.trimDb ?? 0),
+      sustainSecs: spec.sustainSecs,
+    });
+  }
+
+  /**
    * Articulations a style really plays (for the articulation plan and its labels):
    * those every voice has, plus 'solo' if any voice has a solo instrument.
    */
@@ -609,6 +634,7 @@
   window.sampleAttackOffset = attackOffset;  // for checks
   window.setRoundRobins = on => { roundRobinsOn = !!on; };  // for A/B checks (next piece)
   window.createLayeredStyleSamplers = createLayeredStyleSamplers;
+  window.createContinuoSampler = createContinuoSampler;
   window.isVscoAvailable = isVscoAvailable;
   window.noteToMidi = noteToMidi;
 })();

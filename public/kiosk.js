@@ -309,7 +309,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // ---- Now-playing card ----------------------------------------------------
-  function describe(c, data) {
+  function describe(c, data, continuo) {
     const meta = (data && data.meta) || {};
     const form = meta.form || c.form;
     const key = meta.key || c.key;
@@ -321,16 +321,17 @@ document.addEventListener('DOMContentLoaded', () => {
     const details = [
       AFFETTO_IT[c.expressivity] || optionText('expressivityPreset'),
       ARTICULATION_IT[c.articulation] || optionText('articulationSelect'),
+      continuo ? "continuo d'organo nei tutti" : null,
       `Ornamenti ${c.ornamentDensity}%`,
       `${impulse} · ${c.reverbMix}% riverbero`,
       c.seating,
       meta.bars ? `${Math.round(meta.bars)} battute` : optionText('durationSelect'),
-    ].join(' · ');
+    ].filter(Boolean).join(' · ');
     return { title, subtitle, details };
   }
 
-  function showCard(c, data) {
-    const d = describe(c, data);
+  function showCard(c, data, continuo = null) {
+    const d = describe(c, data, continuo);
     ui.count.textContent = `No. ${pieceNo + (data ? 0 : 1)}`;
     ui.title.textContent = d.title;
     ui.subtitle.textContent = d.subtitle;
@@ -418,7 +419,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         failures = 0;
         pieceNo++;
-        showCard(choices, result.data);
+        showCard(choices, result.data, result.continuo);
         setSections(result.articulation);
         setState(player.isMidiEnabled() ? 'In esecuzione · MIDI' : 'In esecuzione');
         startProgress(result.durationSecs);
