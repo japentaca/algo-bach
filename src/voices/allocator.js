@@ -1,4 +1,4 @@
-const { Note } = require('tonal');
+import { Note } from 'tonal';
 
 /**
  * Voice Allocator
@@ -45,4 +45,4 @@ const Allocator = {
   }
 };
 
-module.exports = Allocator;
+export default Allocator;

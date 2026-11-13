@@ -1,10 +1,10 @@
-const seedrandom = require('seedrandom');
-const PhrasePlan = require('../harmony/phrasePlan');
-const { voiceChords } = require('../voices/voicing');
-const Figuration = require('../voices/figuration');
-const { addOrnaments } = require('../voices/ornaments');
-const { toOutput } = require('./output');
-const Fugue = require('./fugue');
+import seedrandom from 'seedrandom';
+import * as PhrasePlan from '../harmony/phrasePlan.js';
+import { voiceChords } from '../voices/voicing.js';
+import * as Figuration from '../voices/figuration.js';
+import { addOrnaments } from '../voices/ornaments.js';
+import { toOutput } from './output.js';
+import * as Fugue from './fugue.js';
 
 /**
  * Composition planner.
@@ -143,4 +143,4 @@ class Planner {
   }
 }
 
-module.exports = Planner;
+export default Planner;

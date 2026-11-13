@@ -1,4 +1,4 @@
-const { generatePiece } = require('./src/main.js');
+import { generatePiece } from './src/main.js';
 
 console.log('=== Enhanced Bach System Demo ===\n');
 

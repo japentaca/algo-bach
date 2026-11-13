@@ -1,4 +1,4 @@
-const { generatePiece } = require('./src/main');
+import { generatePiece } from './src/main.js';
 
 console.log('=== BACH GENERATOR EXAMPLES ===\n');
 

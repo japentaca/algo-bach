@@ -1,5 +1,6 @@
-const Chords = require('../theory/chords');
-const { RANGES } = require('./voicing');
+import { Note } from 'tonal';
+import * as Chords from '../theory/chords.js';
+import { RANGES } from './voicing.js';
 
 /**
  * Figuration: turns the voiced chord skeleton into idiomatic textures.
@@ -26,7 +27,7 @@ const HARD_RANGES = [[60, 81], [55, 74], [48, 67], [40, 60]];
 function localScale(chord, dir = 0) {
   const scale = Chords.keyScale(chord.key, chord.mode);
   const byLetter = {};
-  scale.forEach(n => { byLetter[n[0]] = mod12(require('tonal').Note.chroma(n)); });
+  scale.forEach(n => { byLetter[n[0]] = mod12(Note.chroma(n)); });
   const letters = scale.map(n => n[0]);
   if (chord.mode === 'minor' && dir > 0) {
     byLetter[letters[5]] = mod12(byLetter[letters[5]] + 1);
@@ -533,4 +534,4 @@ function render(chords, voicings, { style, rng, density = 0.5 }) {
   return lines.flat();
 }
 
-module.exports = { render, repair, localScale, scalePath, stepFrom, diminish, FORM_STYLES, findViolations, soundingAt, PROTECTED };
+export { render, repair, localScale, scalePath, stepFrom, diminish, FORM_STYLES, findViolations, soundingAt, PROTECTED };

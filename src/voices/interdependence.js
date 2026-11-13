@@ -1,5 +1,5 @@
-const { Note, Interval } = require('tonal');
-const seedrandom = require('seedrandom');
+import { Note, Interval, Scale, Chord } from 'tonal';
+import seedrandom from 'seedrandom';
 
 /**
  * Voice Interdependence Engine
@@ -189,7 +189,7 @@ const VoiceInterdependence = {
 
             // Check if candidate is in scale
             const scaleType = 'major'; // Simplified - should use actual mode
-            const scale = require('tonal').Scale.get(`${key} ${scaleType}`).notes;
+            const scale = Scale.get(`${key} ${scaleType}`).notes;
             const candidatePC = Note.pitchClass(candidatePitch);
 
             if (scale.includes(candidatePC)) {
@@ -245,7 +245,7 @@ const VoiceInterdependence = {
       // 40% chance to arpeggiate block chords
       if (isBlockChord && rng() > 0.6) {
         // Get chord tones
-        const chordTones = require('tonal').Chord.get(chordData.name).notes;
+        const chordTones = Chord.get(chordData.name).notes;
 
         // Create arpeggiated version
         const baseTime = chordNotes[0].startTime;
@@ -435,4 +435,4 @@ const VoiceInterdependence = {
   }
 };
 
-module.exports = VoiceInterdependence;
+export default VoiceInterdependence;

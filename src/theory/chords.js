@@ -1,4 +1,4 @@
-const { Note, Interval, Scale } = require('tonal');
+import { Note, Interval, Scale } from 'tonal';
 
 /**
  * Chord / key theory built from scale degrees.
@@ -183,7 +183,7 @@ function chordFitsKey(chord, tonic, mode) {
   return chord.pcs.every(pc => set.has(pc));
 }
 
-module.exports = {
+export {
   ROMANS,
   keyScale,
   keyPitchClassSet,

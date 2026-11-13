@@ -1,6 +1,6 @@
 
-const Melodic = require('./src/voices/melodic');
-const { Note } = require('tonal');
+import Melodic from './src/voices/melodic.js';
+import { Note } from 'tonal';
 
 console.log('========================================');
 console.log('Minor Scale Adherence Test');

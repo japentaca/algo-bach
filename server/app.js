@@ -1,10 +1,13 @@
-const express = require('express');
-const fs = require('fs');
-const path = require('path');
+import express from 'express';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import * as generator from '../src/main.js';
+import { parseSfz } from './sfz.js';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 const port = 3000;
-const generator = require('../src/main');
-const { parseSfz } = require('./sfz');
 
 app.use(express.json());
 
@@ -139,11 +142,13 @@ app.get('/api/generate', (req, res) => {
   }
 });
 
-// Static files after API routes
+// Static files after API routes. The page itself is served by Vite (npm run dev);
+// after npm run build, dist/ is served here too, so the built site works on this port.
+app.use(express.static(path.join(__dirname, '../dist')));
 app.use(express.static(path.join(__dirname, '../public')));
 
 app.listen(port, () => {
   console.log(`Bach Generator listening at http://localhost:${port}`);
-  console.log(`Open http://localhost:${port} in your browser`);
+  console.log(`Dev page: npm run dev (Vite proxies /soundfonts and /api here); built site: http://localhost:${port} after npm run build`);
   console.log(`API: http://localhost:${port}/api/generate?form=Chorale&mode=major&key=C&duration=2`);
 });

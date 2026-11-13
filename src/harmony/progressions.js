@@ -1,6 +1,6 @@
-const { Note } = require('tonal');
-const seedrandom = require('seedrandom');
-const Chords = require('../theory/chords');
+import { Note } from 'tonal';
+import seedrandom from 'seedrandom';
+import * as Chords from '../theory/chords.js';
 
 /** Chord symbol for a numeral (tonal's fromRomanNumerals ignores case: ii -> D major). */
 const chordName = (key, numeral, mode = 'major') => Chords.realizeNumeral(numeral, key, mode).name;
@@ -435,4 +435,4 @@ const Progressions = {
   }
 };
 
-module.exports = Progressions;
+export default Progressions;

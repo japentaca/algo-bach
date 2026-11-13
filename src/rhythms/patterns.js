@@ -133,4 +133,4 @@ const Rhythms = {
   }
 };
 
-module.exports = Rhythms;
+export default Rhythms;

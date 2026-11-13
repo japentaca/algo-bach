@@ -2,8 +2,8 @@
  * Test Suite for Seventh Chords and Cadence Types
  */
 
-const Progressions = require('./src/harmony/progressions');
-const { Progression } = require('tonal');
+import Progressions from './src/harmony/progressions.js';
+import { Progression } from 'tonal';
 
 console.log('========================================');
 console.log('Seventh Chords & Cadence Tests');

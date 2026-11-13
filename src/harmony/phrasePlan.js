@@ -1,5 +1,5 @@
-const { Note } = require('tonal');
-const Chords = require('../theory/chords');
+import { Note } from 'tonal';
+import * as Chords from '../theory/chords.js';
 
 /**
  * Phrase & tonal planner.
@@ -337,4 +337,4 @@ function describe(chords) {
   }).join(' - ');
 }
 
-module.exports = { planPiece, describe, makeChord, cadenceFormula, sampleBody, VOCAB, relatedKeys };
+export { planPiece, describe, makeChord, cadenceFormula, sampleBody, VOCAB, relatedKeys };

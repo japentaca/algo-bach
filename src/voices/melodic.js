@@ -1,5 +1,5 @@
-const { Note, Interval, Scale, Chord } = require('tonal');
-const Scales = require('../theory/scales');
+import { Note, Interval, Scale, Chord } from 'tonal';
+import Scales from '../theory/scales.js';
 
 /**
  * Default ornament configuration
@@ -1088,5 +1088,5 @@ const Melodic = {
   }
 };
 
-module.exports = Melodic;
+export default Melodic;
 

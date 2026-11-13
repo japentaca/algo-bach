@@ -7,8 +7,10 @@
  * Usage:  node analyze_quality.js            (summary over many seeds)
  *         node analyze_quality.js --verbose  (per-configuration rows)
  */
-const { Note, Scale } = require('tonal');
-const { generatePiece } = require('./src/main');
+import { Note, Scale } from 'tonal';
+import { generatePiece } from './src/main.js';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
 const BEATS = {
   '1n': 4, '2n.': 3, '2n': 2, '4n.': 1.5, '4n': 1,
@@ -183,5 +185,5 @@ function run() {
   console.log(`Deterministic with same seed: ${deterministic}/${determinismRuns}`);
 }
 
-if (require.main === module) run();
-module.exports = { analyze };
+if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) run();
+export { analyze };

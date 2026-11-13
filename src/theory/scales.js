@@ -1,4 +1,4 @@
-const { Scale, Note } = require('tonal');
+import { Scale, Note } from 'tonal';
 
 /**
  * Baroque Scale Engine
@@ -54,4 +54,4 @@ const Scales = {
   }
 };
 
-module.exports = Scales;
+export default Scales;

@@ -2,10 +2,10 @@
  * Comprehensive Integration Test - All New Features
  */
 
-const { generatePiece } = require('./src/main');
-const Progressions = require('./src/harmony/progressions');
-const Rhythms = require('./src/rhythms/patterns');
-const Melodic = require('./src/voices/melodic');
+import { generatePiece } from './src/main.js';
+import Progressions from './src/harmony/progressions.js';
+import Rhythms from './src/rhythms/patterns.js';
+import Melodic from './src/voices/melodic.js';
 
 console.log('========================================');
 console.log('Comprehensive Integration Test');

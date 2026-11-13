@@ -1,3 +1,5 @@
+import { Note } from 'tonal';
+
 /**
  * SATB voice-leading engine (dynamic programming / beam search).
  *
@@ -213,7 +215,6 @@ function transitionCost(p, c, chordP, chordC) {
  */
 function voiceChords(chords, opts = {}) {
   const { rng = null, jitter = 2, beam = 40, maxCandidates = 140 } = opts;
-  const { Note } = require('tonal');
   let layer = null;
   const layers = [];
 
@@ -292,4 +293,4 @@ function relaxedCandidates(chord, fixed, active) {
   return result.length ? result : [opts.map(o => o[0])];
 }
 
-module.exports = { voiceChords, transitionCost, parallelCost, staticCost, RANGES, CENTERS };
+export { voiceChords, transitionCost, parallelCost, staticCost, RANGES, CENTERS };

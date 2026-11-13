@@ -1,4 +1,4 @@
-const { Interval } = require('tonal');
+import { Interval } from 'tonal';
 
 /**
  * Bach-style Counterpoint Rules Engine
@@ -135,4 +135,4 @@ const Rules = {
   }
 };
 
-module.exports = Rules;
+export default Rules;

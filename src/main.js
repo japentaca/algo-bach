@@ -1,4 +1,4 @@
-const Planner = require('./composition/planner');
+import Planner from './composition/planner.js';
 
 function generatePiece(options) {
   // Use the new Planner for generation
@@ -8,4 +8,4 @@ function generatePiece(options) {
   return piece;
 }
 
-module.exports = { generatePiece };
+export { generatePiece };

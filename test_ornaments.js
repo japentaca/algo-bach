@@ -2,8 +2,8 @@
  * Test Suite for Enhanced Ornament Functions
  */
 
-const Melodic = require('./src/voices/melodic');
-const { Note } = require('tonal');
+import Melodic from './src/voices/melodic.js';
+import { Note } from 'tonal';
 
 console.log('========================================');
 console.log('Enhanced Ornament Functions Test');

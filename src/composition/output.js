@@ -1,4 +1,4 @@
-const Chords = require('../theory/chords');
+import * as Chords from '../theory/chords.js';
 
 /**
  * Converts internal notes {voice, midi, start, dur, type, chordIndex} into the
@@ -63,4 +63,4 @@ function toOutput(notes, chords, { rng, humanize = 0.15, keyOf = null } = {}) {
     .sort((a, b) => a.startTime - b.startTime || a.voice - b.voice);
 }
 
-module.exports = { toOutput, durationName };
+export { toOutput, durationName };

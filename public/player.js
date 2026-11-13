@@ -848,12 +848,22 @@ document.addEventListener('DOMContentLoaded', () => {
       const ornamentDensitySlider = document.getElementById('ornamentDensity');
       const ornamentDensity = ornamentDensitySlider ? parseInt(ornamentDensitySlider.value) : 50;
 
-      console.log(`Fetching: /api/generate?key=${selectedKey}&mode=${selectedMode}&form=${form}&duration=${barsToGenerate}&seed=${encodeURIComponent(currentSeed)}&ornamentDensity=${ornamentDensity}&expressivity=${expressivityPreset}&randomTexture=${randomTexture}&sparseOrnaments=${sparseOrnaments}`);
+      // The generator runs in the page (src/browser.js). Options keep the shape the old
+      // GET /api/generate handed it (req.query): every value a string.
+      const genOptions = {
+        key: String(selectedKey), mode: String(selectedMode), form: String(form),
+        duration: String(barsToGenerate), seed: String(currentSeed),
+        ornamentDensity: String(ornamentDensity), expressivity: String(expressivityPreset),
+        randomTexture: String(randomTexture), sparseOrnaments: String(sparseOrnaments),
+      };
+      console.log('Generating:', genOptions);
+      if (!window.BachGenerator) throw new Error('Generator not loaded');
 
-      const response = await fetch(`/api/generate?key=${encodeURIComponent(selectedKey)}&mode=${selectedMode}&form=${form}&duration=${barsToGenerate}&seed=${encodeURIComponent(currentSeed)}&ornamentDensity=${ornamentDensity}&expressivity=${encodeURIComponent(expressivityPreset)}&randomTexture=${randomTexture}&sparseOrnaments=${sparseOrnaments}`);
-      if (!response.ok) throw new Error("Server error");
-
-      const data = await response.json();
+      // Let the status line paint before the (synchronous) generation
+      await new Promise(r => setTimeout(r, 0));
+      if (superseded()) return { ok: false, aborted: true };
+      // JSON round trip: the same plain data the server response used to give
+      const data = JSON.parse(JSON.stringify(window.BachGenerator.generatePiece(genOptions)));
       if (superseded()) return { ok: false, aborted: true };
       console.log("Data received:", data);
       console.log("Total notes:", data.notes.length);

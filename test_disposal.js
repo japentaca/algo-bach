@@ -3,8 +3,11 @@
  * Simulates loading different instrument styles and verifies resources are cleaned up
  */
 
-const fs = require('fs');
-const path = require('path');
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // Load the player.js file to check for disposal logic
 const playerPath = path.join(__dirname, 'public', 'player.js');

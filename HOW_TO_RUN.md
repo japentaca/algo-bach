@@ -13,8 +13,8 @@ This shows working examples of generating different compositions.
 ### Option 2: Node.js API (Programmatic)
 
 ```bash
-node -e "
-const {generatePiece} = require('./src/main');
+node --input-type=module -e "
+import { generatePiece } from './src/main.js';
 const piece = generatePiece({
   form: 'Chorale',
   mode: 'major',
@@ -25,15 +25,31 @@ console.log(JSON.stringify(piece, null, 2));
 "
 ```
 
-### Option 3: Web Server (Interactive)
+### Option 3: Web page (Interactive)
+
+The project is ES modules (`"type": "module"`). The page is built with Vite:
+`index.html` (repo root) is the entry, `src/browser.js` bundles the generator
+(`window.BachGenerator.generatePiece`, called by `public/player.js`, so composing
+needs no server), and `public/` (the classic `<script>` files, `impulses/`,
+`Orchestra/`) is served and copied as is.
 
 ```bash
-node server/app.js
+npm install
+npm run server   # Express on :3000 — VSCO / SFZ samples (/soundfonts, /api/vsco/*, /api/sfz*)
+npm run dev      # Vite on http://localhost:41324 — proxies /soundfonts and /api to :3000
+npm run build    # static site in dist/
+npm run preview  # serves dist/ (same proxy to :3000)
 ```
 
-Then open: `http://localhost:3000`
+Without the Express server the page still composes and plays the `Orchestra/`
+styles; the VSCO and harpsichord styles stay disabled. After `npm run build`,
+`npm run server` alone also serves the built site on :3000.
 
-API endpoints:
+Golden snapshots of the generator (the option shape the page sends, every value a
+string): `node tools/golden.mjs write <dir>` once, then `node tools/golden.mjs check
+<dir>` (or `check <dir> dist/assets/index-*.js` to check the browser bundle).
+
+Server endpoints:
 - `GET /api/generate?form=Chorale&mode=major&key=C&duration=4`
 - `GET /api/generate?form=Prelude&mode=minor&key=D&duration=2`
 - `GET /api/vsco/status` → `{ available }` (VSCO 2 CE samples found in carrilion's soundfonts)
@@ -199,17 +215,17 @@ plan (`public/articulation.js`).
 
 ### Generate a C Major Chorale (4 bars)
 ```bash
-node -e "const {generatePiece} = require('./src/main'); console.log(JSON.stringify(generatePiece({form: 'Chorale', mode: 'major', key: 'C', duration: 4}), null, 2));"
+node --input-type=module -e "import { generatePiece } from './src/main.js'; console.log(JSON.stringify(generatePiece({form: 'Chorale', mode: 'major', key: 'C', duration: 4}), null, 2));"
 ```
 
 ### Generate a D Minor Prelude (3 bars)
 ```bash
-node -e "const {generatePiece} = require('./src/main'); console.log(JSON.stringify(generatePiece({form: 'Prelude', mode: 'minor', key: 'D', duration: 3}), null, 2));"
+node --input-type=module -e "import { generatePiece } from './src/main.js'; console.log(JSON.stringify(generatePiece({form: 'Prelude', mode: 'minor', key: 'D', duration: 3}), null, 2));"
 ```
 
 ### Generate a G Major Gigue (2 bars, with dotted rhythms)
 ```bash
-node -e "const {generatePiece} = require('./src/main'); console.log(JSON.stringify(generatePiece({form: 'Gigue', mode: 'major', key: 'G', duration: 2}), null, 2));"
+node --input-type=module -e "import { generatePiece } from './src/main.js'; console.log(JSON.stringify(generatePiece({form: 'Gigue', mode: 'major', key: 'G', duration: 2}), null, 2));"
 ```
 
 ## Running Tests

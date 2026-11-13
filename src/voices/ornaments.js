@@ -1,4 +1,4 @@
-const { localScale, stepFrom } = require('./figuration');
+import { localScale, stepFrom } from './figuration.js';
 
 /**
  * Baroque ornaments placed where they belong stylistically, instead of on
@@ -53,4 +53,4 @@ function addOrnaments(notes, chords, { rng, density = 0.5 }) {
   return out;
 }
 
-module.exports = { addOrnaments };
+export { addOrnaments };

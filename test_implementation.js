@@ -3,11 +3,11 @@
  * Tests critical fixes and enhancements
  */
 
-const { generatePiece } = require('./src/main');
-const Progressions = require('./src/harmony/progressions');
-const Leading = require('./src/voices/leading');
-const Scales = require('./src/theory/scales');
-const { Note, Chord } = require('tonal');
+import { generatePiece } from './src/main.js';
+import Progressions from './src/harmony/progressions.js';
+import Leading from './src/voices/leading.js';
+import Scales from './src/theory/scales.js';
+import { Note, Chord } from 'tonal';
 
 console.log('========================================');
 console.log('Bach Generator - Implementation Tests');

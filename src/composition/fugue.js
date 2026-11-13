@@ -1,10 +1,10 @@
-const { Note } = require('tonal');
-const Chords = require('../theory/chords');
-const PhrasePlan = require('../harmony/phrasePlan');
-const { voiceChords, RANGES, CENTERS } = require('../voices/voicing');
-const Figuration = require('../voices/figuration');
-const { addOrnaments } = require('../voices/ornaments');
-const { toOutput } = require('./output');
+import { Note } from 'tonal';
+import * as Chords from '../theory/chords.js';
+import * as PhrasePlan from '../harmony/phrasePlan.js';
+import { voiceChords, RANGES, CENTERS } from '../voices/voicing.js';
+import * as Figuration from '../voices/figuration.js';
+import { addOrnaments } from '../voices/ornaments.js';
+import { toOutput } from './output.js';
 
 /**
  * Fugue engine.
@@ -682,4 +682,4 @@ function findStretto(subject, key, mode) {
   return { ...best, voices };
 }
 
-module.exports = { generate, composeSubject, tonalAnswer, composeCountersubject };
+export { generate, composeSubject, tonalAnswer, composeCountersubject };

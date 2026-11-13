@@ -1,5 +1,6 @@
-const Progressions = require('../harmony/progressions');
-const seedrandom = require('seedrandom');
+import { Note } from 'tonal';
+import Progressions from '../harmony/progressions.js';
+import seedrandom from 'seedrandom';
 
 /**
  * Phrase Structure Engine
@@ -183,9 +184,9 @@ const PhraseStructure = {
     if (modulate) {
       // Modulate to dominant (major) or relative (minor)
       if (mode === 'major') {
-        bKey = require('tonal').Note.transpose(key, '5P'); // Dominant
+        bKey = Note.transpose(key, '5P'); // Dominant
       } else {
-        bKey = require('tonal').Note.transpose(key, '3M'); // Relative major
+        bKey = Note.transpose(key, '3M'); // Relative major
       }
     }
 
@@ -246,9 +247,9 @@ const PhraseStructure = {
 
     // Modulate to dominant (major) or relative (minor) for B section
     if (mode === 'major') {
-      bKey = require('tonal').Note.transpose(key, '5P'); // Dominant
+      bKey = Note.transpose(key, '5P'); // Dominant
     } else {
-      bKey = require('tonal').Note.transpose(key, '3M'); // Relative major
+      bKey = Note.transpose(key, '3M'); // Relative major
     }
 
     const bData = Progressions.generate(bKey, sectionLength, bSeed, bMode, 'HC');
@@ -359,4 +360,4 @@ const PhraseStructure = {
   }
 };
 
-module.exports = PhraseStructure;
+export default PhraseStructure;

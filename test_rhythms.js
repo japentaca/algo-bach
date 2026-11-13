@@ -2,8 +2,8 @@
  * Test Suite for Rhythmic Patterns
  */
 
-const Rhythms = require('./src/rhythms/patterns');
-const { generatePiece } = require('./src/main');
+import Rhythms from './src/rhythms/patterns.js';
+import { generatePiece } from './src/main.js';
 
 console.log('========================================');
 console.log('Rhythmic Patterns Test');

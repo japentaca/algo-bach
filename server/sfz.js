@@ -14,8 +14,8 @@
  * ampeg_attack / ampeg_release / ampeg_sustain=0 + ampeg_decay (a sample that
  * fades out by itself). Key-switched regions (sw_*) are skipped.
  */
-const fs = require('fs');
-const path = require('path');
+import fs from 'fs';
+import path from 'path';
 
 const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 const midiToNote = (m) => `${NOTE_NAMES[m % 12]}${Math.floor(m / 12) - 1}`;
@@ -266,4 +266,4 @@ function parseSfz(sfzFile, libDir, baseUrl) {
   };
 }
 
-module.exports = { parseSfz, tokenize, flattenRegions, parseKey, audioInfo, midiToNote };
+export { parseSfz, tokenize, flattenRegions, parseKey, audioInfo, midiToNote };

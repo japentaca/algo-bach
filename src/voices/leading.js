@@ -1,7 +1,8 @@
-const { Note, Interval, Chord } = require('tonal');
-const Rules = require('../theory/rules');
-const Allocator = require('./allocator');
-const seedrandom = require('seedrandom');
+import { Note, Interval, Chord } from 'tonal';
+import Rules from '../theory/rules.js';
+import Allocator from './allocator.js';
+import Scales from '../theory/scales.js';
+import seedrandom from 'seedrandom';
 
 /**
  * Voice Leading Engine
@@ -217,7 +218,6 @@ const Leading = {
 
     // 4. Tendency Tone Resolution (Leading Tone → Tonic)
     // Leading tone (scale degree 7) must resolve UP to tonic
-    const Scales = require('../theory/scales');
     const leadingTone = Scales.getLeadingTone(key);
     const tonic = Note.pitchClass(key); // The tonic pitch class
 
@@ -243,7 +243,6 @@ const Leading = {
    * @returns {number} Penalty if not resolved (0-30)
    */
   check7thResolution: (v1, v2, chordData) => {
-    const Scales = require('../theory/scales');
     let penalty = 0;
 
     // Find the 7th of the chord (if it's a 7th chord)
@@ -298,7 +297,6 @@ const Leading = {
    * @returns {number} Penalty cost (0 if valid, >0 if violated)
    */
   validateDoubling: (voicing, chordData, key = 'C') => {
-    const Scales = require('../theory/scales');
     let cost = 0;
 
     // Count occurrences of each pitch class
@@ -329,4 +327,4 @@ const Leading = {
   }
 };
 
-module.exports = Leading;
+export default Leading;
