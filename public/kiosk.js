@@ -43,15 +43,15 @@ document.addEventListener('DOMContentLoaded', () => {
   const KIOSK_VOICE_PROFILES = ['auto', 'auto', 'auto', 'auto'];  // no per-voice overrides
   // Reverb: always on in kiosk mode. Rooms suited to Baroque music (churches, halls),
   // each with a wet-mix range (%) set by its length: long tails get a little less mix.
-  // The player crossfades dry = 1 - mix, wet = mix; ~35% puts the hall clearly audible
-  // (about 6 dB under the direct sound) without washing the counterpoint out.
+  // The player crossfades dry = 1 - mix, wet = mix. 50% is the mix chosen by ear (the
+  // manual default): with RoomHuge the reverb sits about level with the direct sound.
   // Only one room is drawn; the others stay selectable by hand in "El taller".
   // RoomHuge: RT60 ~3.1 s with an early decay (EDT) of ~1.8 s and a wide tail (L/R
   // correlation 0.15): a church-like tail heard in rests and phrase ends while the
   // counterpoint stays clear. The concert hall (RT60 1.55 s, 62% of its energy in the
   // first 80 ms) fused with the direct sound and was heard as too little reverb.
   const REVERB_SPACES = {
-    'RoomHuge.mp3': [34, 48],
+    'RoomHuge.mp3': [45, 55],  // around the 50% chosen by ear (slider steps of 5)
   };
   // Harpsichords: drier than the piano's -6. The VCSL samples are the far microphones
   // (the room is already in them) and a dense, sharp attack in every voice smears under
@@ -69,7 +69,11 @@ document.addEventListener('DOMContentLoaded', () => {
     VscoStrings: 1.3, VscoWoodwinds: 0.8, VscoBrass: 0.7,
     VscoOboeStrings: 0.8, VscoFluteStrings: 0.8, VscoTrumpetStrings: 0.6, VscoOboeBassoon: 0.6,
     HarpsichordFull: 0.7, Harpsichord8: 0.6,
-    Strings: 0.25, Woodwinds: 0.25, Brass: 0.2, Mixed: 0.25, Harp: 0.3,
+    Strings: 0.25, Brass: 0.2, Harp: 0.3,
+    // Never drawn: their one-layer flute and oboe samples have the vibrato in the take, a
+    // 5-9 Hz swell of +-3-5 dB (flute) / +-1-2 dB (oboe) heard as a tremolo on every note.
+    // The VSCO woodwinds and Baroque ensembles play those parts with a straight tone.
+    Woodwinds: 0, Mixed: 0,
   };
 
   // Stereo seatings [S, A, T, B] scaled by a random width. Ensembles: the modern stage
@@ -168,7 +172,8 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!values.length) return null;
     let r = Math.random() * values.reduce((s, v) => s + (weights[v] || 0), 0);
     for (const v of values) {
-      r -= weights[v] || 0;
+      if (!(weights[v] > 0)) continue;  // weight 0: never drawn
+      r -= weights[v];
       if (r <= 0) return v;
     }
     return values[values.length - 1];

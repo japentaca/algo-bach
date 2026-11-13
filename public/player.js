@@ -643,8 +643,8 @@ document.addEventListener('DOMContentLoaded', () => {
       limiter = new Tone.Limiter(-1).toDestination();
 
       // Create dry/wet mix nodes
-      dryGain = new Tone.Gain(0.65).connect(limiter);  // Default 65% dry (35% wet)
-      reverbGain = new Tone.Gain(0.35).connect(limiter);  // Default 35% wet
+      dryGain = new Tone.Gain(0.5).connect(limiter);  // Default 50% dry (50% wet)
+      reverbGain = new Tone.Gain(0.5).connect(limiter);  // Default 50% wet
 
       // Create the convolver (reverb) node
       convolver = new Tone.Convolver({ url: null, normalize: true }).connect(reverbGain);
