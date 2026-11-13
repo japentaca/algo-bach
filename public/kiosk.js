@@ -45,15 +45,13 @@ document.addEventListener('DOMContentLoaded', () => {
   // each with a wet-mix range (%) set by its length: long tails get a little less mix.
   // The player crossfades dry = 1 - mix, wet = mix; ~35% puts the hall clearly audible
   // (about 6 dB under the direct sound) without washing the counterpoint out.
+  // Only one room is drawn; the others stay selectable by hand in "El taller".
+  // RoomHuge: RT60 ~3.1 s with an early decay (EDT) of ~1.8 s and a wide tail (L/R
+  // correlation 0.15): a church-like tail heard in rests and phrase ends while the
+  // counterpoint stays clear. The concert hall (RT60 1.55 s, 62% of its energy in the
+  // first 80 ms) fused with the direct sound and was heard as too little reverb.
   const REVERB_SPACES = {
-    'RoomConcertHall.mp3': [32, 46],
-    'RoomLarge.mp3': [34, 48],
-    'RoomHuge.mp3': [28, 40],
-    'PlateMedium.mp3': [32, 46],
-    'PlateLarge.mp3': [26, 38],
-    'PrimeMed.mp3': [36, 50],
-    'PrimeLong.mp3': [30, 44],
-    'PrimeXtraLong.mp3': [26, 38],
+    'RoomHuge.mp3': [34, 48],
   };
   // Harpsichords: drier than the piano's -6. The VCSL samples are the far microphones
   // (the room is already in them) and a dense, sharp attack in every voice smears under
@@ -266,7 +264,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const spaces = optionValues('impulseSelect', v => v in REVERB_SPACES);
     c.impulse = pick(spaces.length ? spaces : optionValues('impulseSelect', v => v !== 'none'));
-    const [mixLo, mixHi] = REVERB_SPACES[c.impulse] || [30, 44];
+    const [mixLo, mixHi] = REVERB_SPACES[c.impulse] || [40, 54];
     const mixShift = REVERB_SHIFT_BY_STYLE[c.style] || 0;
     c.reverbMix = setRange('reverbMix', rand(mixLo, mixHi) + mixShift);
     setSelect('impulseSelect', c.impulse);  // after the mix, so the change handler applies the new mix

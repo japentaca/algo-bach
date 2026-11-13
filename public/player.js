@@ -42,7 +42,7 @@ document.addEventListener('DOMContentLoaded', () => {
   let dryGain;     // Gain node to control dry signal
   let currentSeed = null;
   let currentStyle = 'Strings';  // Default style
-  let currentImpulse = 'RoomConcertHall.mp3';  // Current impulse response file (default: Concert Hall)
+  let currentImpulse = 'RoomHuge.mp3';  // Current impulse response file (default: RoomHuge, see kiosk.js)
   let midiInitialized = false;  // Track if MIDI has been initialized
   let loadedImpulse = null;     // Impulse file currently loaded into the convolver
 
@@ -643,8 +643,8 @@ document.addEventListener('DOMContentLoaded', () => {
       limiter = new Tone.Limiter(-1).toDestination();
 
       // Create dry/wet mix nodes
-      dryGain = new Tone.Gain(0.75).connect(limiter);  // Default 75% dry (25% wet)
-      reverbGain = new Tone.Gain(0.25).connect(limiter);  // Default 25% wet
+      dryGain = new Tone.Gain(0.65).connect(limiter);  // Default 65% dry (35% wet)
+      reverbGain = new Tone.Gain(0.35).connect(limiter);  // Default 35% wet
 
       // Create the convolver (reverb) node
       convolver = new Tone.Convolver({ url: null, normalize: true }).connect(reverbGain);
