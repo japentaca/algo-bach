@@ -31,28 +31,67 @@ The project is ES modules (`"type": "module"`). The page is built with Vite:
 `index.html` (repo root) is the entry, `src/browser.js` bundles the generator
 (`window.BachGenerator.generatePiece`, called by `public/player.js`, so composing
 needs no server), and `public/` (the classic `<script>` files, `impulses/`,
-`Orchestra/`) is served and copied as is.
+`Orchestra/`, and the VSCO / VCSL `soundfonts/` + `manifests/` written by `npm run
+samples`) is served and copied as is.
 
 ```bash
 npm install
-npm run server   # Express on :3000 — VSCO / SFZ samples (/soundfonts, /api/vsco/*, /api/sfz*)
-npm run dev      # Vite on http://localhost:41324 — proxies /soundfonts and /api to :3000
-npm run build    # static site in dist/
-npm run preview  # serves dist/ (same proxy to :3000)
+npm run samples  # once (and after changing instruments): manifests + samples from carrilion
+npm run dev      # Vite on http://localhost:41324
+npm run build    # static site in dist/ (fails if a referenced sample is missing)
+npm run preview  # serves dist/
+npm run check:samples  # every style's manifests and samples exist in dist/
 ```
 
-Without the Express server the page still composes and plays the `Orchestra/`
-styles; the VSCO and harpsichord styles stay disabled. After `npm run build`,
-`npm run server` alone also serves the built site on :3000.
+**No server is needed**: `dist/` works from any static host (Cloudflare Pages: 1282
+samples + 40 manifests, largest file 1.4 MiB, well under its 25 MiB / 20,000-file limits).
+
+**Samples** (`npm run samples` = `tools/build-sample-manifests.mjs`): reads
+`public/instrumentConfig.js` for every VSCO instrument × articulation a style can load
+(each part's sustain, its `arts`, its `solo` arts, the `continuo` organ) and every
+whitelisted `.sfz`, asks `server/samples.js` for the answer (the same code behind the
+Express routes below), and writes it as static JSON:
+
+- `public/manifests/vsco/status.json`, `public/manifests/vsco/<instrument>/<articulation>.json`
+- `public/manifests/sfz/VCSL-Keys/status.json`, `public/manifests/sfz/VCSL-Keys/<file without .sfz>.json`
+- `public/manifests/index.json` (the list, for the checks)
+
+(names: every run of characters outside `A-Za-z0-9._-` becomes `_`, e.g.
+`ViolinEnsSus/Sustain_Vibrato.json`, `Harpsichord_Flemish_-_8_.json`;
+`public/layeredSampler.js` builds the same URLs — keep `MANIFESTS` in both in sync).
+Then it copies exactly the files those maps name (main takes, round-robin `alts`,
+velocity layers, stacked registers, release samples: 1282 files, 253.6 MiB) from
+`SOUNDFONTS_DIR` (default carrilion's `assets/soundfonts`; carrilion is only read) into
+`public/soundfonts/<library>/` at the same relative path, and deletes anything else
+there. The only change is to the paths: `#` becomes `s` (`A#3` → `As3`, the VSCO-2
+naming) and `$&+,:;=?@` are dropped (`Harpsichord, Flemish/` → `Harpsichord Flemish/`):
+the page encodes paths with `encodeURIComponent`, and sirv (`vite preview`) decodes them
+with `decodeURI`, which leaves `%23` / `%2C` encoded, so the file is not found and
+index.html comes back instead. The manifests carry the renamed paths; otherwise they are
+identical to the Express answers (checked: all 40, 22 of them after the rename).
+
+**Format: the files are copied as they are, not re-encoded.** carrilion's VSCO 2 CE is
+already MP3 (320 kbps, 1174 files, 210.9 MiB) and VCSL Keys is FLAC (24-bit, 108 files,
+42.8 MiB); Chrome, Firefox and Safari all decode both in `decodeAudioData` (Safari has
+never decoded Ogg Vorbis reliably). The total is within Cloudflare's limits, so a second
+lossy generation (MP3 → Vorbis would be ~82 MiB, measured on a 1/25 sample) is not
+worth it: the decoded audio is bit-for-bit what Express served, so the round-robin level
+matching (peak 100 ms RMS), `.sfz` offsets and release timings cannot shift.
+
+**Git**: `public/soundfonts/` is git-ignored (254 MB is too much to version; it is
+regenerated from carrilion in ~2 s); `public/manifests/` (~0.7 MB of JSON) is committed,
+so changes to the maps show up in diffs. `npm run build` fails, listing the missing
+files, when a manifest or a sample it names is not in `dist/` (`check-samples` plugin
+in `vite.config.js`).
 
 Golden snapshots of the generator (the option shape the page sends, every value a
 string): `node tools/golden.mjs write <dir>` once, then `node tools/golden.mjs check
 <dir>` (or `check <dir> dist/assets/index-*.js` to check the browser bundle).
 
-Server endpoints:
+The Express server (`npm run server`, :3000) is optional: it serves `dist/` and the
+live answers the manifests are built from (`/soundfonts` from carrilion's folder):
 - `GET /api/generate?form=Chorale&mode=major&key=C&duration=4`
-- `GET /api/generate?form=Prelude&mode=minor&key=D&duration=2`
-- `GET /api/vsco/status` → `{ available }` (VSCO 2 CE samples found in carrilion's soundfonts)
+- `GET /api/vsco/status` → `{ available }` (VSCO 2 CE samples found in `SOUNDFONTS_DIR`)
 - `GET /api/vsco/articulation?instrument=Violin&articulation=Spiccato` → sample map and
   velocity layers of one articulation. Each sample/layer may carry `alts`: the other
   round-robin takes of that note found on disk (`_rr1/_rr2`, `_RR1/_RR2`, `_1/_2`).
@@ -62,7 +101,7 @@ Server endpoints:
   `/api/vsco/articulation` (`baseUrl`, `samples` per note with `root` / `gain`, `velocity`,
   `alts`), plus `stack` (regions sounding together, e.g. the 4' over the 8'), `offset` (s),
   `releases` (the release samples per note), `envelope` and `info` (region counts). Only
-  the files listed in `SFZ_LIBRARIES` (server/app.js) can be read; each is parsed once
+  the files listed in `SFZ_LIBRARIES` (server/samples.js) can be read; each is parsed once
   (server/sfz.js: `<control>/<global>/<master>/<group>/<region>` inheritance,
   `default_path`, comments, `seq_position` round robins; key-switch files are not used).
 
@@ -127,9 +166,9 @@ the `articulation.voiceProfiles` returned by `generateAndPlay`, and
 `BachPlayer.articulationStats()` (notes played per voice and articulation).
 
 **Harpsichords** (styles `HarpsichordFull` = Flemish 8' + 4', `Harpsichord8` = Flemish 8'):
-samples from Versilian Studios' **VCSL Keys** (CC0, public domain), not part of this repo:
-put the `VCSL-Keys` folder in carrilion's `assets/soundfonts` (or `SOUNDFONTS_DIR`); the
-options stay disabled without it. The Flemish instrument was chosen by measuring all 8 VCSL
+samples from Versilian Studios' **VCSL Keys** (CC0, public domain), copied by `npm run
+samples` from the `VCSL-Keys` folder in carrilion's `assets/soundfonts` (or
+`SOUNDFONTS_DIR`); the options stay disabled without their manifests. The Flemish instrument was chosen by measuring all 8 VCSL
 harpsichords (evenness, tuning, decay, release samples); see the comment in
 `public/instrumentConfig.js`. A harpsichord has no dynamics: the velocity curve is almost
 flat (±1 dB) and there are no velocity layers; every note gets its full pluck (never

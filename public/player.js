@@ -410,20 +410,20 @@ document.addEventListener('DOMContentLoaded', () => {
     currentStyle = styleSelect.value || currentStyle;
     updateVoiceArtControls(currentStyle);
 
-    // Velocity-layered (VSCO) styles stay disabled unless the server can serve the samples
+    // Velocity-layered (VSCO) styles stay disabled unless the site has the samples (npm run samples)
     if (typeof isVscoAvailable === 'function') {
       isVscoAvailable().then(available => {
         Array.from(styleSelect.options).forEach(opt => {
           const preset = STYLE_PRESETS[opt.value];
           if (preset && preset.engine === 'vsco') {
             opt.disabled = !available;
-            opt.title = available ? '' : 'VSCO samples not found (set SOUNDFONTS_DIR on the server)';
+            opt.title = available ? '' : 'VSCO samples not found (run npm run samples)';
           }
         });
         console.log(`VSCO velocity-layered styles ${available ? 'enabled' : 'unavailable'}`);
       });
     }
-    // SFZ keyboards (VCSL harpsichords): enabled only if the server has their .sfz file
+    // SFZ keyboards (VCSL harpsichords): enabled only if the site has their manifest
     if (typeof sfzAvailability === 'function') {
       sfzAvailability().then(status => {
         const files = new Set((status && status.files) || []);
@@ -433,7 +433,7 @@ document.addEventListener('DOMContentLoaded', () => {
           if (preset && preset.engine === 'sfz') {
             const ok = files.has(preset.sfz.file);
             opt.disabled = !ok;
-            opt.title = ok ? '' : `${preset.sfz.lib} samples not found (set SOUNDFONTS_DIR on the server)`;
+            opt.title = ok ? '' : `${preset.sfz.lib} samples not found (run npm run samples)`;
             if (ok) enabled++;
           }
         });

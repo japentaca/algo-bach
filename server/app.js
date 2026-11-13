@@ -1,9 +1,8 @@
 import express from 'express';
-import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import * as generator from '../src/main.js';
-import { parseSfz } from './sfz.js';
+import { SOUNDFONTS_DIR, vscoStatus, vscoArticulation, sfzStatus, sfzFileOk, sfzInstrument } from './samples.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -11,122 +10,34 @@ const port = 3000;
 
 app.use(express.json());
 
-// ---- Optional velocity-layered samples (VSCO 2 CE, indexed by carrilion) ----
-// The samples are not part of this repo: they are served from carrilion's
-// soundfont folder (or SOUNDFONTS_DIR). carrilion's indexer already wrote
-// metadata.json with key ranges, per-sample gain and velocity layers.
-const SOUNDFONTS_DIR = process.env.SOUNDFONTS_DIR
-  || path.join(__dirname, '../../../carrilion/assets/soundfonts');
-const VSCO_NAME = 'VSCO-2-CE-1.1.0';
-const VSCO_METADATA = path.join(SOUNDFONTS_DIR, VSCO_NAME, 'metadata.json');
-let vscoCatalog;  // undefined = not read yet, null = unavailable
-
-function getVscoCatalog() {
-  if (vscoCatalog !== undefined) return vscoCatalog;
-  try {
-    const meta = JSON.parse(fs.readFileSync(VSCO_METADATA, 'utf8'));
-    vscoCatalog = meta.catalog[VSCO_NAME] || null;
-  } catch (error) {
-    console.log(`VSCO samples not available (${VSCO_METADATA}): ${error.message}`);
-    vscoCatalog = null;
-  }
-  return vscoCatalog;
-}
-
+// ---- Optional velocity-layered samples (VSCO 2 CE / VCSL Keys, from carrilion) ----
+// The built site does not need these routes: tools/build-sample-manifests.mjs writes
+// the same answers as static JSON (public/manifests/) and copies the samples into
+// public/soundfonts/. They stay here to compare against (server/samples.js holds the
+// shared logic) and to play from carrilion's folder directly.
 app.use('/soundfonts', express.static(SOUNDFONTS_DIR, { maxAge: '7d', fallthrough: false }));
 
-app.get('/api/vsco/status', (req, res) => {
-  res.json({ available: !!getVscoCatalog() });
-});
-
-// Round robins: the catalog points to ONE file per note and layer, but VSCO often
-// recorded each note twice or more ("_rr1"/"_rr2", "_RR1"/"_RR2", "_1"/"_2"). The
-// other takes that really exist on disk are listed as `alts`, so the player can
-// alternate them on repeated notes.
-const RR_SUFFIX = /(_rr|_RR|_)(\d)(\.\w+)$/;
-const RR_MAX = 4;
-const altsCache = new Map();  // sample path -> [other takes]
-
-function roundRobinAlts(samplePath) {
-  if (altsCache.has(samplePath)) return altsCache.get(samplePath);
-  const alts = [];
-  if (RR_SUFFIX.test(samplePath)) {
-    for (let d = 1; d <= RR_MAX; d++) {
-      const alt = samplePath.replace(RR_SUFFIX, (m, pre, n, ext) => `${pre}${d}${ext}`);
-      if (alt !== samplePath && fs.existsSync(path.join(SOUNDFONTS_DIR, VSCO_NAME, alt))) alts.push(alt);
-    }
-  }
-  altsCache.set(samplePath, alts);
-  return alts;
-}
-
-/** Copy of a catalog sample entry with its round-robin `alts` (when there are any). */
-function withAlts(sample) {
-  if (!sample || !sample.path) return sample;
-  const alts = roundRobinAlts(sample.path);
-  return alts.length ? { ...sample, alts } : sample;
-}
+app.get('/api/vsco/status', (req, res) => res.json(vscoStatus()));
 
 // Sample map + velocity layers of one articulation: ?instrument=&articulation=
 app.get('/api/vsco/articulation', (req, res) => {
-  const catalog = getVscoCatalog();
-  if (!catalog) return res.status(404).json({ error: 'vsco_unavailable' });
-  const { instrument, articulation } = req.query;
-  const inst = typeof instrument === 'string' && Object.prototype.hasOwnProperty.call(catalog.instruments, instrument)
-    ? catalog.instruments[instrument] : null;
-  const art = inst && inst.articulations.find(a => a.name === articulation);
-  if (!art) return res.status(404).json({ error: 'not_found' });
-  const samples = {};
-  for (const [note, s] of Object.entries(art.samples)) samples[note] = withAlts(s);
-  const velocity = {};
-  for (const [note, layers] of Object.entries(art.velocity || {})) velocity[note] = layers.map(withAlts);
-  res.json({
-    baseUrl: `soundfonts/${encodeURIComponent(VSCO_NAME)}/`,
-    samples,
-    velocity,
-  });
+  if (!vscoStatus().available) return res.status(404).json({ error: 'vsco_unavailable' });
+  const detail = vscoArticulation(req.query.instrument, req.query.articulation);
+  if (!detail) return res.status(404).json({ error: 'not_found' });
+  res.json(detail);
 });
-
-// ---- SFZ instruments (VCSL Keys harpsichords, CC0, served from carrilion) ----
-// Only whitelisted libraries / files can be read (no path from the query reaches the
-// file system). Each .sfz is parsed once and returns the same shape as
-// /api/vsco/articulation, plus `releases` (the release / jack samples per note).
-const SFZ_LIBRARIES = {
-  'VCSL-Keys': [
-    "Harpsichord, Flemish - Full.sfz",
-    "Harpsichord, Flemish - 8'.sfz",
-    "Harpsichord, Flemish - 4'.sfz",
-  ],
-};
-const sfzCache = new Map();  // "lib|file" -> parsed instrument
-
-function sfzFileOk(lib, file) {
-  return typeof lib === 'string' && typeof file === 'string'
-    && Object.prototype.hasOwnProperty.call(SFZ_LIBRARIES, lib) && SFZ_LIBRARIES[lib].includes(file);
-}
 
 app.get('/api/sfz/status', (req, res) => {
-  const lib = typeof req.query.lib === 'string' ? req.query.lib : 'VCSL-Keys';
-  if (!Object.prototype.hasOwnProperty.call(SFZ_LIBRARIES, lib)) return res.json({ available: false, files: [] });
-  const files = SFZ_LIBRARIES[lib].filter(f => fs.existsSync(path.join(SOUNDFONTS_DIR, lib, f)));
-  res.json({ available: files.length > 0, files });
+  res.json(sfzStatus(typeof req.query.lib === 'string' ? req.query.lib : 'VCSL-Keys'));
 });
 
-// ?lib=VCSL-Keys&file=Harpsichord, Italian.sfz
+// ?lib=VCSL-Keys&file=Harpsichord, Flemish - 8'.sfz
 app.get('/api/sfz', (req, res) => {
   const { lib, file } = req.query;
   if (!sfzFileOk(lib, file)) return res.status(404).json({ error: 'not_found' });
-  const key = `${lib}|${file}`;
-  if (!sfzCache.has(key)) {
-    const libDir = path.join(SOUNDFONTS_DIR, lib);
-    try {
-      sfzCache.set(key, parseSfz(path.join(libDir, file), libDir, `soundfonts/${encodeURIComponent(lib)}/`));
-    } catch (error) {
-      console.log(`SFZ not available (${lib} / ${file}): ${error.message}`);
-      return res.status(404).json({ error: 'sfz_unavailable' });
-    }
-  }
-  res.json(sfzCache.get(key));
+  const detail = sfzInstrument(lib, file);
+  if (!detail) return res.status(404).json({ error: 'sfz_unavailable' });
+  res.json(detail);
 });
 
 // API routes BEFORE static middleware
@@ -142,13 +53,13 @@ app.get('/api/generate', (req, res) => {
   }
 });
 
-// Static files after API routes. The page itself is served by Vite (npm run dev);
+// Static files after API routes. The page itself is static (npm run dev / preview);
 // after npm run build, dist/ is served here too, so the built site works on this port.
 app.use(express.static(path.join(__dirname, '../dist')));
 app.use(express.static(path.join(__dirname, '../public')));
 
 app.listen(port, () => {
   console.log(`Bach Generator listening at http://localhost:${port}`);
-  console.log(`Dev page: npm run dev (Vite proxies /soundfonts and /api here); built site: http://localhost:${port} after npm run build`);
+  console.log(`Built site (npm run build): http://localhost:${port}. Not needed by the site itself: npm run dev / npm run preview are static.`);
   console.log(`API: http://localhost:${port}/api/generate?form=Chorale&mode=major&key=C&duration=2`);
 });

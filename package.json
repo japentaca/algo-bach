@@ -7,6 +7,8 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
+    "samples": "node tools/build-sample-manifests.mjs",
+    "check:samples": "node tools/check-samples.mjs",
     "server": "node server/app.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },

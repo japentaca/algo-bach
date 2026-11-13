@@ -226,7 +226,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   /**
-   * Wait until the page has enabled the styles whose samples the server has (VSCO,
+   * Wait until the page has enabled the styles whose samples the site has (VSCO,
    * SFZ harpsichords: player.js enables them when these checks resolve), so the draw
    * covers every ensemble from the first piece.
    */

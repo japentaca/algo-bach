@@ -2,3 +2,7 @@ node_modules
 public/Orchestra
 public/impulses
 dist
+
+# VSCO / VCSL samples copied from carrilion by `npm run samples` (~254 MB, MP3 + FLAC
+# as they are): regenerate, do not commit. Their maps (public/manifests/) are committed.
+public/soundfonts/

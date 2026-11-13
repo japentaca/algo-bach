@@ -9,7 +9,7 @@
  *     the same level, so the layer gives the TIMBRE and the player's velocity
  *     gain curve gives the LOUDNESS,
  *   - lazy loading: only the files a given piece needs are fetched (prepare()),
- *   - SFZ keyboards (/api/sfz, VCSL harpsichords): stacked registers (`stack`, e.g.
+ *   - SFZ keyboards (manifests/sfz/, VCSL harpsichords): stacked registers (`stack`, e.g.
  *     8' + 4'), region start offsets, and release samples (`releases`) played at the
  *     end of each note at a fixed level (createSfzStyleSamplers).
  *
@@ -154,14 +154,25 @@
     return peak;
   }
 
+  // ---- Sample maps: static JSON written by tools/build-sample-manifests.mjs -------
+  // (npm run samples), the same answers server/app.js gives on /api/vsco/* and
+  // /api/sfz*. Keep these names in sync with MANIFESTS in server/samples.js.
+  const manifestName = s => String(s).replace(/[^A-Za-z0-9._-]+/g, '_');
+  const MANIFESTS = {
+    vscoStatus: 'manifests/vsco/status.json',
+    vscoArticulation: (instrument, articulation) =>
+      `manifests/vsco/${manifestName(instrument)}/${manifestName(articulation)}.json`,
+    sfzStatus: lib => `manifests/sfz/${manifestName(lib)}/status.json`,
+    sfzInstrument: (lib, file) => `manifests/sfz/${manifestName(lib)}/${manifestName(file.replace(/\.sfz$/i, ''))}.json`,
+  };
+
   // ---- Articulation maps (fetched once per instrument/articulation) -------------
   const articulationCache = new Map();
 
   function fetchArticulation(instrument, articulation) {
     const key = `${instrument}|${articulation}`;
     if (!articulationCache.has(key)) {
-      const q = `instrument=${encodeURIComponent(instrument)}&articulation=${encodeURIComponent(articulation)}`;
-      const p = fetch(`/api/vsco/articulation?${q}`).then(r => {
+      const p = fetch(MANIFESTS.vscoArticulation(instrument, articulation)).then(r => {
         if (!r.ok) throw new Error(`VSCO ${instrument} / ${articulation}: ${r.status}`);
         return r.json();
       });
@@ -172,10 +183,10 @@
   }
 
   let vscoStatus = null;
-  /** Whether the server can serve the VSCO samples (cached). */
+  /** Whether the site has the VSCO samples (cached). */
   function isVscoAvailable() {
     if (!vscoStatus) {
-      vscoStatus = fetch('/api/vsco/status')
+      vscoStatus = fetch(MANIFESTS.vscoStatus)
         .then(r => (r.ok ? r.json() : { available: false }))
         .then(s => !!s.available)
         .catch(() => false);
@@ -802,7 +813,7 @@
   function fetchSfz(lib, file) {
     const key = `${lib}|${file}`;
     if (!sfzCache.has(key)) {
-      const p = fetch(`/api/sfz?lib=${encodeURIComponent(lib)}&file=${encodeURIComponent(file)}`).then(r => {
+      const p = fetch(MANIFESTS.sfzInstrument(lib, file)).then(r => {
         if (!r.ok) throw new Error(`SFZ ${lib} / ${file}: ${r.status}`);
         return r.json();
       });
@@ -813,10 +824,10 @@
   }
 
   let sfzStatus = null;
-  /** The .sfz files the server can serve ({ available, files }), cached. */
+  /** The .sfz files the site has ({ available, files }), cached. */
   function sfzAvailability() {
     if (!sfzStatus) {
-      sfzStatus = fetch('/api/sfz/status')
+      sfzStatus = fetch(MANIFESTS.sfzStatus('VCSL-Keys'))
         .then(r => (r.ok ? r.json() : { available: false, files: [] }))
         .catch(() => ({ available: false, files: [] }));
     }
