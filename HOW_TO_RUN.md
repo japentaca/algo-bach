@@ -127,6 +127,29 @@ while held is released 20 ms before. The final chord and cadence chords (3+ voic
 `BachPlayer.articulationStats()` (`sustain` / `stacked` notes); `setReleaseSamples(false)`
 turns the release samples off (A/B tests).
 
+**Baroque ensembles (VSCO)** (styles `VscoOboeStrings`, `VscoFluteStrings`,
+`VscoTrumpetStrings`, `VscoOboeBassoon`): one obbligato wind over the strings (the B minor
+Suite's flute, the oboe concertos and arias, the cantatas' trumpet), or the oboe with
+the bassoon on the bass line. Each voice is taken whole from a VSCO quartet
+(`VSCO_ENSEMBLES` in `public/instrumentConfig.js`) with that quartet's level folded into
+its trims, so it sounds as in its own quartet; only instruments whose samples cover the
+generator's range for that voice. Articulations are the ones every voice has (no
+pizzicato); the organ continuo plays in the ritornello tutti.
+
+**Kiosk** (`?kiosk`): every piece draws its ensemble from every style the page can play
+(weighted towards the VSCO quartets, the Baroque ensembles and the harpsichords; the older
+one-layer samples now and then), waiting for the VSCO / SFZ checks so they are in the draw
+from the first piece. Coherence: pizzicato only on an ensemble that plucks, tempo and
+reverb mix shifted per style, a hall or plate always on (never "none"), and a stereo
+seating spread over the stage (modern or antiphonal for ensembles, from the keyboard,
+narrower, for one instrument). `BachKiosk.randomize()` returns the choices.
+
+**Reverb routing**: each voice (and the continuo organ) goes Volume → Panner → dry bus,
+and Volume → a mono reverb send (−3 dB) → Convolver → wet bus; dry and wet meet in the
+master Limiter. The send is taken before the panner on purpose: a stereo convolver does
+not cross-feed, so a panned send gave each voice its reverb on its own side only. Now
+every voice gets the same full-width room wherever it is seated.
+
 ## Parameters
 
 | Parameter | Values | Default | Description |

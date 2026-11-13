@@ -558,14 +558,21 @@
         groups.get(lbl).push(v);
       });
       const parts = [s.label];
+      const who = s.kind === 'solo' ? (caps.has('solo') ? 'violino solo' : 'solo') : 'tutti';
+      // A solo that shares its manner with other voices joins them: "Episodio · legato ·
+      // solo e basso staccato" instead of "Episodio · solo staccato · legato · basso staccato".
+      const soloJoins = soloOwn && groups.has(soloOwn);
       if (s.kind === 'tutti' || s.kind === 'solo') {
-        const who = s.kind === 'solo' ? (caps.has('solo') ? 'violino solo' : 'solo') : 'tutti';
-        parts.push(soloOwn ? `${who} ${soloOwn}` : who);
+        if (!soloJoins) parts.push(soloOwn ? `${who} ${soloOwn}` : who);
         if (profile !== 'auto' || !anyAuto) parts.push(s.characterLabel);
       } else {
         parts.push(s.characterLabel);
       }
-      groups.forEach((vs, lbl) => parts.push(`${joinIt(vs.map(v => names[v]))} ${lbl}`));
+      groups.forEach((vs, lbl) => {
+        const ws = vs.map(v => names[v]);
+        if (soloJoins && lbl === soloOwn) ws.unshift(who);
+        parts.push(`${joinIt(ws)} ${lbl}`);
+      });
       s.text = parts.join(' · ');
     });
 

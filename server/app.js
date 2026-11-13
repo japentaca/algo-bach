@@ -93,11 +93,6 @@ const SFZ_LIBRARIES = {
     "Harpsichord, Flemish - Full.sfz",
     "Harpsichord, Flemish - 8'.sfz",
     "Harpsichord, Flemish - 4'.sfz",
-    'Harpsichord, French.sfz',
-    'Harpsichord, Italian.sfz',
-    'Harpsichord, Unk.sfz',
-    'Harpsichord, English - Normal.sfz',
-    'Harpsichord, English - Lute.sfz',
   ],
 };
 const sfzCache = new Map();  // "lib|file" -> parsed instrument

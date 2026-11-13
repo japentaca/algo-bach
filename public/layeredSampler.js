@@ -613,7 +613,7 @@
     constructor(part, style) {
       this.style = style;
       const arts = part.arts || {};
-      this.specs = { sustain: { instrument: part.instrument, articulation: part.articulation, trimDb: part.trimDb } };
+      this.specs = { sustain: { instrument: part.instrument, articulation: part.articulation, trimDb: part.trimDb, release: part.release } };
       for (const [name, spec] of Object.entries(arts)) {
         if (name !== 'solo') this.specs[name] = spec;
       }

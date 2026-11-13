@@ -524,6 +524,89 @@ const STYLE_PRESETS = {
   },
 };
 
+// ---- Baroque mixed ensembles (VSCO) ------------------------------------------------
+// The scorings of Bach's concertos, suites and cantata arias: one obbligato wind over
+// the strings (the B minor Suite's flute, the oboe concertos and arias, the trumpet of
+// the cantatas), or the oboe with the bassoon on the continuo line. Each voice is taken
+// whole from a quartet above ([style, voice]) with that style's level folded into its
+// own trims, so it sounds exactly as in its quartet; the voice keeps the position it
+// was measured in, or a range that covers the generator's (soprano B3-G5, alto F3-E5,
+// tenor B2-A4, bass C#2-C4): oboe Bb3-F6, flute C4-C7, trumpet F3-C6, bassoon Bb1-Eb5.
+// Articulations: the ones every voice has (styleArticulations), so no pizzicato.
+// `lift` (dB per voice): the obbligato wind raised so it stands over the strings as
+// violin I does in the string quartet. Measured: soprano against the three lower voices
+// (dry, soprano hard left, the rest right), Chorales in D, G, Bb and E, quartet first and
+// last in turn; mean of the 4: violin I -1.4 dB; with +1.5 the flute -1.5 (kept) and the
+// oboe -2.3, raised to +2 (half a dB under parity: at equal RMS its reedy 2-4 kHz
+// already carries more). Single pieces spread by +-1.7 dB (register, layers). The
+// trumpet is not raised: one piece put it ~1 dB over violin I, as a trumpet should be.
+// The organ continuo of the strings / woodwinds (same absolute level in both).
+const VSCO_ENSEMBLES = {
+  VscoOboeStrings: {
+    displayName: 'VSCO Oboe & Strings',
+    parts: [['VscoWoodwinds', 1], ['VscoStrings', 1], ['VscoStrings', 2], ['VscoStrings', 3]],
+    voiceNames: ['Oboe', 'Violin', 'Viola', 'Cello'],
+    lift: [2, 0, 0, 0],
+    continuo: 'VscoStrings',
+  },
+  VscoFluteStrings: {
+    displayName: 'VSCO Flute & Strings',
+    parts: [['VscoWoodwinds', 0], ['VscoStrings', 1], ['VscoStrings', 2], ['VscoStrings', 3]],
+    voiceNames: ['Flute', 'Violin', 'Viola', 'Cello'],
+    lift: [1.5, 0, 0, 0],
+    continuo: 'VscoStrings',
+  },
+  VscoTrumpetStrings: {
+    displayName: 'VSCO Trumpet & Strings',
+    parts: [['VscoBrass', 0], ['VscoStrings', 1], ['VscoStrings', 2], ['VscoStrings', 3]],
+    voiceNames: ['Trumpet', 'Violin', 'Viola', 'Cello'],
+    continuo: 'VscoStrings',
+  },
+  VscoOboeBassoon: {
+    displayName: 'VSCO Oboe, Strings & Bassoon',
+    parts: [['VscoWoodwinds', 1], ['VscoStrings', 1], ['VscoStrings', 2], ['VscoWoodwinds', 3]],
+    voiceNames: ['Oboe', 'Violin', 'Viola', 'Bassoon'],
+    lift: [2, 0, 0, 0],
+    continuo: 'VscoWoodwinds',
+  },
+};
+
+/** A VSCO part with its style's trimDb (+ lift) / release folded into every articulation spec. */
+function foldVscoPart(style, part, lift = 0) {
+  const fold = (spec) => ({
+    ...spec,
+    trimDb: (style.trimDb ?? 0) + (spec.trimDb ?? 0) + lift,
+    release: spec.release ?? style.release,
+  });
+  const arts = {};
+  Object.entries(part.arts || {}).forEach(([name, spec]) => {
+    if (name === 'solo') {
+      arts.solo = {};
+      Object.entries(spec).forEach(([n, s]) => { arts.solo[n] = fold(s); });
+    } else {
+      arts[name] = fold(spec);
+    }
+  });
+  return { ...fold(part), arts };
+}
+
+Object.entries(VSCO_ENSEMBLES).forEach(([name, def]) => {
+  const src = def.continuo && STYLE_PRESETS[def.continuo];
+  STYLE_PRESETS[name] = {
+    displayName: def.displayName,
+    engine: 'vsco',
+    ensemble: true,  // a mixed scoring (kiosk weighting)
+    release: 0.3,
+    trimDb: 0,       // folded into each part
+    voiceNames: def.voiceNames,
+    vsco: def.parts.map(([styleName, v], i) =>
+      foldVscoPart(STYLE_PRESETS[styleName], STYLE_PRESETS[styleName].vsco[v], (def.lift && def.lift[i]) || 0)),
+    continuo: src && src.continuo
+      ? { ...src.continuo, trimDb: (src.trimDb ?? 0) + (src.continuo.trimDb ?? 0) }
+      : undefined,
+  };
+});
+
 // Export for use in player.js
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {

@@ -28,12 +28,11 @@ document.addEventListener('DOMContentLoaded', () => {
   };
   // Harpsichords: the piano's +4 — a plucked string dies away (-20 dB in ~2 s), so slow
   // chorales and held notes need to move on a little
-  const TEMPO_SHIFT_BY_STYLE = { Brass: -6, Harp: -4, VscoBrass: -6, HarpsichordFull: 4, Harpsichord8: 4 };
+  const TEMPO_SHIFT_BY_STYLE = { Brass: -6, Harp: -4, VscoBrass: -6, VscoTrumpetStrings: -3, HarpsichordFull: 4, Harpsichord8: 4 };
   // Articulation profile (the "Articulation" selector): mostly the Baroque-practice
   // plan, sometimes one manner for the whole piece. Pizzicato only where the ensemble
-  // really plucks (VSCO strings).
+  // really plucks (every voice has a pizzicato: the VSCO string quartet).
   const ARTICULATION_WEIGHTS = { auto: 0.6, legato: 0.14, detached: 0.14, pizzicato: 0.12 };
-  const PIZZICATO_STYLES = ['VscoStrings'];
   const ARTICULATION_IT = { auto: 'Articolazione naturale', legato: 'Tutto legato', detached: 'Tutto staccato', pizzicato: 'Tutto pizzicato' };
   const KIOSK_VOICE_PROFILES = ['auto', 'auto', 'auto', 'auto'];  // no per-voice overrides
   // Reverb: always on in kiosk mode. Rooms suited to Baroque music (churches, halls),
@@ -53,7 +52,21 @@ document.addEventListener('DOMContentLoaded', () => {
   // Harpsichords: drier than the piano's -6. The VCSL samples are the far microphones
   // (the room is already in them) and a dense, sharp attack in every voice smears under
   // a long wet tail; the mix still stays >= 18% (PrimeXtraLong's 26-38 minus 8)
-  const REVERB_SHIFT_BY_STYLE = { Strings: 3, Brass: 2, Harp: -3, VscoBrass: 2, VscoStrings: 3, HarpsichordFull: -8, Harpsichord8: -8 };
+  const REVERB_SHIFT_BY_STYLE = {
+    Strings: 3, Brass: 2, Harp: -3, VscoBrass: 2, VscoStrings: 3, HarpsichordFull: -8, Harpsichord8: -8,
+    VscoOboeStrings: 2, VscoFluteStrings: 2, VscoTrumpetStrings: 2, VscoOboeBassoon: 2,
+  };
+
+  // Ensemble of each piece: any style the page can play (its option enabled), drawn
+  // with these weights so the real recorded instruments come up most: the VSCO
+  // quartets and Baroque scorings, then the harpsichords; the older one-layer
+  // samples (Strings, Woodwinds, Brass, Harp, Mixed) now and then. Unlisted styles: 0.5.
+  const STYLE_WEIGHTS = {
+    VscoStrings: 1.3, VscoWoodwinds: 0.8, VscoBrass: 0.7,
+    VscoOboeStrings: 0.8, VscoFluteStrings: 0.8, VscoTrumpetStrings: 0.6, VscoOboeBassoon: 0.6,
+    HarpsichordFull: 0.7, Harpsichord8: 0.6,
+    Strings: 0.25, Woodwinds: 0.25, Brass: 0.2, Mixed: 0.25, Harp: 0.3,
+  };
 
   // Stereo seatings [S, A, T, B] scaled by a random width. Ensembles: the modern stage
   // (high voices left, low voices right) or the antiphonal Baroque seating (the two
@@ -82,6 +95,8 @@ document.addEventListener('DOMContentLoaded', () => {
     HarpsichordFull: "Clavicembalo fiammingo (8' e 4')", Harpsichord8: "Clavicembalo fiammingo (8')",
     VscoWoodwinds: 'Quartetto di legni (VSCO)',
     VscoBrass: 'Quartetto di ottoni (VSCO)', VscoStrings: "Quartetto d'archi (VSCO)",
+    VscoOboeStrings: 'Oboe e archi', VscoFluteStrings: 'Flauto traverso e archi',
+    VscoTrumpetStrings: 'Tromba e archi', VscoOboeBassoon: 'Oboe, archi e fagotto',
   };
   const AFFETTO_IT = { style: 'Affetto naturale', delicate: 'Dolce', lyrical: 'Cantabile', bold: 'Con fuoco' };
 
@@ -204,6 +219,25 @@ document.addEventListener('DOMContentLoaded', () => {
     return values[values.length - 1];
   }
 
+  /** Whether every voice of the style plucks for real (a global pizzicato makes sense). */
+  function canPluck(styleName) {
+    const style = typeof STYLE_PRESETS !== 'undefined' && STYLE_PRESETS[styleName];
+    return !!style && typeof styleArticulations === 'function' && styleArticulations(style).includes('pizzicato');
+  }
+
+  /**
+   * Wait until the page has enabled the styles whose samples the server has (VSCO,
+   * SFZ harpsichords: player.js enables them when these checks resolve), so the draw
+   * covers every ensemble from the first piece.
+   */
+  async function stylesReady() {
+    const checks = [];
+    if (typeof isVscoAvailable === 'function') checks.push(isVscoAvailable());
+    if (typeof sfzAvailability === 'function') checks.push(sfzAvailability());
+    await Promise.all(checks.map(p => Promise.resolve(p).catch(() => null)));
+    await new Promise(r => setTimeout(r, 0));  // after player.js's own handlers
+  }
+
   function makeSeed() {
     return 'kiosk_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8);
   }
@@ -240,7 +274,8 @@ document.addEventListener('DOMContentLoaded', () => {
     c.key = pick(optionValues('keySelect'));
     c.mode = pick(optionValues('modeSelect'));
     c.form = pick(optionValues('formSelect'));
-    c.style = pick(optionValues('styleSelect'));
+    const styles = optionValues('styleSelect');
+    c.style = pickWeighted(styles, Object.fromEntries(styles.map(v => [v, STYLE_WEIGHTS[v] ?? 0.5])));
     c.duration = pickShortBiased(optionValues('durationSelect'));
     c.expressivity = pick(optionValues('expressivityPreset'));
     setSelect('keySelect', c.key);
@@ -258,7 +293,7 @@ document.addEventListener('DOMContentLoaded', () => {
     c.ornamentDensity = setRange('ornamentDensity', rand(20, 80));
 
     const artOptions = optionValues('articulationSelect')
-      .filter(v => v in ARTICULATION_WEIGHTS && (v !== 'pizzicato' || PIZZICATO_STYLES.includes(c.style)));
+      .filter(v => v in ARTICULATION_WEIGHTS && (v !== 'pizzicato' || canPluck(c.style)));
     c.articulation = pickWeighted(artOptions, ARTICULATION_WEIGHTS) || 'auto';
     setSelect('articulationSelect', c.articulation);
 
@@ -409,6 +444,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // ---- The loop ------------------------------------------------------------
   async function loop(myRun) {
+    await stylesReady();
     while (active && myRun === runId) {
       let choices = null;
       try {

@@ -38,6 +38,7 @@ document.addEventListener('DOMContentLoaded', () => {
   let limiter;
   let convolver;  // Convolver node for reverb
   let reverbGain;  // Gain node to control reverb mix
+  let reverbSend;  // mono bus feeding the convolver (pre-pan, see initAudio)
   let dryGain;     // Gain node to control dry signal
   let currentSeed = null;
   let currentStyle = 'Strings';  // Default style
@@ -208,7 +209,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const volume = new Tone.Volume(0);
     const panner = new Tone.Panner(pan);
     panner.connect(dryGain);
-    panner.connect(convolver);
+    volume.connect(reverbSend);  // the room hears the organ from wherever it stands (see initAudio)
     volume.connect(panner);
     sampler.connect(volume);
     continuo = { sampler, volume, panner };
@@ -344,6 +345,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function voiceLabels(styleName) {
     if (VOICE_LABELS[styleName]) return VOICE_LABELS[styleName];
+    if (STYLE_PRESETS[styleName] && STYLE_PRESETS[styleName].voiceNames) return STYLE_PRESETS[styleName].voiceNames;
     const inst = STYLE_PRESETS[styleName] && STYLE_PRESETS[styleName].instruments;
     return inst && inst.length === 4 && new Set(inst).size === 4 ? inst : SATB;
   }
@@ -647,6 +649,23 @@ document.addEventListener('DOMContentLoaded', () => {
       // Create the convolver (reverb) node
       convolver = new Tone.Convolver({ url: null, normalize: true }).connect(reverbGain);
 
+      // Reverb send: every voice (and the organ) is fed to the room in mono, BEFORE its
+      // panner. A 2-channel ConvolverNode fed a stereo signal convolves left with left
+      // and right with right only (no cross-feed), so a panned send made each voice's
+      // reverb come back on its own side (measured: four voices hard left, reverb right
+      // channel -45.8 dB against -15.3 left): the widely seated strings sounded drier
+      // and narrower than a narrowly seated keyboard, and each side of the stage got its
+      // own half of the room. From a mono send every voice excites both channels of
+      // the impulse alike: the same, full-width room for all, wherever they sit (hard
+      // left = centred, to 0.1 dB per channel). -3 dB: a mono input drives both
+      // channels at full level, where the centred panned send split its power (wet
+      // level of a centred quartet unchanged: -14.8 against -14.5 dB, meter noise).
+      reverbSend = new Tone.Gain(Math.SQRT1_2);
+      reverbSend.channelCount = 1;
+      reverbSend.channelCountMode = 'explicit';
+      reverbSend.channelInterpretation = 'speakers';
+      reverbSend.connect(convolver);
+
       console.log("✓ Convolver, Gains, and Limiter initialized");
     }
   }
@@ -712,9 +731,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const volume = new Tone.Volume(0);
         const panner = new Tone.Panner(pans[i]);
 
-        // Connect to both dry and reverb paths
+        // Dry path panned; reverb send taken before the panner (mono, see initAudio)
         panner.connect(dryGain);
-        panner.connect(convolver);
+        volume.connect(reverbSend);
 
         volume.connect(panner);
         loadedSamplers[i].connect(volume);
