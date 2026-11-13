@@ -1,4 +1,5 @@
 import { defineConfig } from 'vite';
+import { readdirSync } from 'fs';
 import { resolve } from 'path';
 import { checkTree } from './tools/sample-manifest-lib.mjs';
 
@@ -7,6 +8,33 @@ import { checkTree } from './tools/sample-manifest-lib.mjs';
 // and the VSCO / VCSL samples with their static maps (public/soundfonts/,
 // public/manifests/, written by `npm run samples`). The generator (src/) is bundled
 // through src/browser.js. No server is needed.
+
+// virtual:autores-images: the portraits in public/autores/ for the hero slideshow
+// (ui/slideshow.js). Relative paths (base './'), so dist/ works from any folder.
+function autoresImagesPlugin() {
+  const virtualId = 'virtual:autores-images';
+  const resolvedId = '\0' + virtualId;
+  let root = process.cwd();
+  const scan = () => {
+    try {
+      return readdirSync(resolve(root, 'public/autores'))
+        .filter(f => /\.(jpe?g|png|webp|gif|avif)$/i.test(f))
+        .sort()
+        .map(f => 'autores/' + encodeURIComponent(f));
+    } catch {
+      return [];
+    }
+  };
+  return {
+    name: 'autores-images',
+    configResolved(config) { root = config.root; },
+    resolveId(id) { if (id === virtualId) return resolvedId; },
+    load(id) { if (id === resolvedId) return `export default ${JSON.stringify(scan())};`; },
+    handleHotUpdate({ file, server }) {
+      if (file.replace(/\\/g, '/').includes('public/autores')) server.ws.send({ type: 'full-reload' });
+    },
+  };
+}
 
 // Fails the build if a manifest or a sample it names is missing from dist/
 // (public/soundfonts/ is git-ignored: regenerate it with `npm run samples`).
@@ -36,5 +64,5 @@ export default defineConfig({
   server: {
     port: 41324,
   },
-  plugins: [checkSamplesPlugin()],
+  plugins: [autoresImagesPlugin(), checkSamplesPlugin()],
 });

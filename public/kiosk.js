@@ -5,16 +5,21 @@
  * generate & play path exposed by player.js (window.BachPlayer). It waits for the
  * piece's `finished` promise, rests for PAUSE_BETWEEN_PIECES_MS and starts again.
  *
- * Entry: the "Kiosk" button, or ?kiosk / #kiosk in the URL (shows a "tap to begin"
- * overlay, because browsers only start audio after a user gesture).
- * Exit: Escape, leaving fullscreen, or the "Exit kiosk" button.
+ * Presentation (one mode for the whole page): the hero, the slideshow, the invented
+ * author and title, the progress bar and the score follow every piece through the
+ * player's events (ui/main.js); this file adds the kiosk's own lines to the hero (piece
+ * number, state, details, seed) and sets body.kiosk-on, which hides the controls.
+ *
+ * Entry: the "Iniciar" button (#kioskBtn), or ?kiosk / #kiosk in the URL (shows a "tap
+ * to begin" overlay, because browsers only start audio after a user gesture; that
+ * path also goes fullscreen).
+ * Exit: Escape, leaving fullscreen, or the same button ("Detener").
  *
  * MIDI output settings are never touched.
  */
 document.addEventListener('DOMContentLoaded', () => {
   // ---- Tunables ----------------------------------------------------------
   const PAUSE_BETWEEN_PIECES_MS = 4000;  // silence after a piece's reverb tail
-  const SECTION_LEAD_SECS = 0.5;         // the first note sounds this long after playback starts
   const GENERATE_TIMEOUT_MS = 90000;     // generation + sample loading must finish within this
   const RETRY_BASE_MS = 5000;            // first retry delay after an error
   const RETRY_MAX_MS = 60000;            // back-off ceiling
@@ -25,6 +30,7 @@ document.addEventListener('DOMContentLoaded', () => {
     Ritornello: [96, 138],
     Variations: [72, 116],
     Suite: [76, 126],
+    Passacaglia: [60, 92],
   };
   // Harpsichords: the piano's +4 — a plucked string dies away (-20 dB in ~2 s), so slow
   // chorales and held notes need to move on a little
@@ -33,7 +39,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // plan, sometimes one manner for the whole piece. Pizzicato only where the ensemble
   // really plucks (every voice has a pizzicato: the VSCO string quartet).
   const ARTICULATION_WEIGHTS = { auto: 0.6, legato: 0.14, detached: 0.14, pizzicato: 0.12 };
-  const ARTICULATION_IT = { auto: 'Articolazione naturale', legato: 'Tutto legato', detached: 'Tutto staccato', pizzicato: 'Tutto pizzicato' };
+  const ARTICULATION_ES = { auto: 'Articulación natural', legato: 'Todo legato', detached: 'Todo destacado', pizzicato: 'Todo pizzicato' };
   const KIOSK_VOICE_PROFILES = ['auto', 'auto', 'auto', 'auto'];  // no per-voice overrides
   // Reverb: always on in kiosk mode. Rooms suited to Baroque music (churches, halls),
   // each with a wet-mix range (%) set by its length: long tails get a little less mix.
@@ -73,65 +79,30 @@ document.addEventListener('DOMContentLoaded', () => {
   // upper parts facing each other across the stage). Harpsichord and harp: one instrument,
   // heard from the keyboard (treble right), kept narrower.
   const SEATINGS = {
-    moderna: { label: 'Disposizione moderna', pans: [-1, -0.35, 0.35, 0.8], weight: 0.65 },
-    antifonale: { label: 'Disposizione antifonale', pans: [-1, 1, -0.35, 0.35], weight: 0.35 },
+    moderna: { label: 'Disposición moderna', pans: [-1, -0.35, 0.35, 0.8], weight: 0.65 },
+    antifonale: { label: 'Disposición antifonal', pans: [-1, 1, -0.35, 0.35], weight: 0.35 },
   };
-  const KEYBOARD_SEATING = { label: 'Dalla tastiera', pans: [1, 0.35, -0.35, -1] };
+  const KEYBOARD_SEATING = { label: 'Desde el teclado', pans: [1, 0.35, -0.35, -1] };
   const KEYBOARD_STYLES = ['Harp', 'HarpsichordFull', 'Harpsichord8'];
 
-  // ---- Italianate labels -------------------------------------------------
-  const FORM_IT = {
-    Chorale: 'Corale', Prelude: 'Preludio', Fugue: 'Fuga', Ritornello: 'Ritornello',
-    Variations: 'Variazioni', Suite: 'Suite',
-  };
-  const KEY_IT = {
-    C: 'Do', 'C#': 'Do♯', D: 'Re', Eb: 'Mi♭', E: 'Mi', F: 'Fa', 'F#': 'Fa♯',
-    G: 'Sol', Ab: 'La♭', A: 'La', Bb: 'Si♭', B: 'Si',
-  };
-  const MODE_IT = { major: 'maggiore', minor: 'minore' };
-  const STYLE_IT = {
-    Strings: "Quartetto d'archi", Woodwinds: 'Quartetto di legni',
-    Brass: 'Quartetto di ottoni', Harp: 'Arpa', Mixed: 'Orchestra',
-    HarpsichordFull: "Clavicembalo fiammingo (8' e 4')", Harpsichord8: "Clavicembalo fiammingo (8')",
-    VscoWoodwinds: 'Quartetto di legni (VSCO)',
-    VscoBrass: 'Quartetto di ottoni (VSCO)', VscoStrings: "Quartetto d'archi (VSCO)",
-    VscoOboeStrings: 'Oboe e archi', VscoFluteStrings: 'Flauto traverso e archi',
-    VscoTrumpetStrings: 'Tromba e archi', VscoOboeBassoon: 'Oboe, archi e fagotto',
-  };
-  const AFFETTO_IT = { style: 'Affetto naturale', delicate: 'Dolce', lyrical: 'Cantabile', bold: 'Con fuoco' };
-
-  function tempoMarking(bpm) {
-    if (bpm < 60) return 'Largo';
-    if (bpm < 72) return 'Adagio';
-    if (bpm < 88) return 'Andante';
-    if (bpm < 108) return 'Moderato';
-    if (bpm < 132) return 'Allegro';
-    if (bpm < 160) return 'Vivace';
-    return 'Presto';
-  }
+  // ---- Labels (the details line of the hero) --------------------------------
+  const AFFETTO_ES = { style: 'Afecto natural', delicate: 'Dolce', lyrical: 'Cantabile', bold: 'Con fuoco' };
 
   // ---- Elements ----------------------------------------------------------
   const $ = (id) => document.getElementById(id);
   const kioskBtn = $('kioskBtn');
-  const stage = $('kioskStage');
   const overlay = $('kioskOverlay');
-  const exitBtn = $('kioskExitBtn');
+  const exitBtn = $('kioskExitBtn');  // optional: #kioskBtn toggles too
   const ui = {
     count: $('kioskCount'),
-    title: $('kioskTitle'),
-    subtitle: $('kioskSubtitle'),
-    section: $('kioskSection'),
     details: $('kioskDetails'),
     seed: $('kioskSeed'),
     state: $('kioskState'),
-    bar: $('kioskProgress'),
-    fill: $('kioskProgressFill'),
-    elapsed: $('kioskElapsed'),
-    total: $('kioskTotal'),
   };
+  const setText = (el, text) => { if (el) el.textContent = text; };
 
-  if (!window.BachPlayer || !stage) {
-    console.error('Kiosk: player API or kiosk markup missing; kiosk disabled.');
+  if (!window.BachPlayer) {
+    console.error('Kiosk: player API missing; kiosk disabled.');
     if (kioskBtn) kioskBtn.disabled = true;
     return;
   }
@@ -144,11 +115,8 @@ document.addEventListener('DOMContentLoaded', () => {
   let failures = 0;
   let wakeLock = null;
   let enteredFullscreen = false;
-  let progressTimer = null;
   let wakeSleep = null;       // resolver that cuts a pending sleep short on exit
   let savedSeedUi = null;
-  let sectionTimeline = null;  // [{atSecs, endSecs, text}] of the piece playing
-  let shownSection = null;
 
   // ---- Helpers -----------------------------------------------------------
   const rand = (min, max) => min + Math.random() * (max - min);
@@ -262,11 +230,6 @@ document.addEventListener('DOMContentLoaded', () => {
     return Promise.race([promise, timeout]).finally(() => clearTimeout(id));
   }
 
-  const fmt = (secs) => {
-    const s = Math.max(0, Math.round(secs));
-    return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
-  };
-
   // ---- Randomizer --------------------------------------------------------
   /** Randomize every musical control and write it back into the DOM. Returns the choices. */
   function randomizeAll() {
@@ -350,96 +313,32 @@ document.addEventListener('DOMContentLoaded', () => {
     savedSeedUi = null;
   }
 
-  // ---- Now-playing card ----------------------------------------------------
+  // ---- Kiosk lines of the hero ------------------------------------------------
   function describe(c, data, continuo) {
     const meta = (data && data.meta) || {};
-    const form = meta.form || c.form;
-    const key = meta.key || c.key;
-    const mode = meta.mode || c.mode;
-    const title = `${FORM_IT[form] || form} in ${KEY_IT[key] || key} ${MODE_IT[mode] || mode}`;
-    const ensemble = STYLE_IT[c.style] || optionText('styleSelect');
-    const subtitle = `${ensemble} · ${tempoMarking(c.tempo)} ♩ = ${c.tempo}`;
-    const impulse = optionText('impulseSelect');
-    const details = [
-      AFFETTO_IT[c.expressivity] || optionText('expressivityPreset'),
-      ARTICULATION_IT[c.articulation] || optionText('articulationSelect'),
-      continuo ? "continuo d'organo nei tutti" : null,
-      `Ornamenti ${c.ornamentDensity}%`,
-      `${impulse} · ${c.reverbMix}% riverbero`,
+    return [
+      AFFETTO_ES[c.expressivity] || optionText('expressivityPreset'),
+      ARTICULATION_ES[c.articulation] || optionText('articulationSelect'),
+      continuo ? 'continuo de órgano en los tutti' : null,
+      `Ornamentos ${c.ornamentDensity}%`,
+      `${optionText('impulseSelect')} · ${c.reverbMix}% de reverberación`,
       c.seating,
-      meta.bars ? `${Math.round(meta.bars)} battute` : optionText('durationSelect'),
+      meta.bars ? `${Math.round(meta.bars)} compases` : optionText('durationSelect'),
     ].filter(Boolean).join(' · ');
-    return { title, subtitle, details };
   }
 
   function showCard(c, data, continuo = null) {
-    const d = describe(c, data, continuo);
-    ui.count.textContent = `No. ${pieceNo + (data ? 0 : 1)}`;
-    ui.title.textContent = d.title;
-    ui.subtitle.textContent = d.subtitle;
-    ui.details.textContent = d.details;
-    ui.seed.textContent = `Seed ${c.seed}`;
+    setText(ui.count, `N.º ${pieceNo + (data ? 0 : 1)}`);
+    setText(ui.details, data ? describe(c, data, continuo) : '');
+    setText(ui.seed, `Semilla ${c.seed}`);
   }
 
   function setState(text) {
-    ui.state.textContent = text;
+    setText(ui.state, text);
   }
 
-  function startProgress(totalSecs) {
-    stopProgress();
-    const t0 = performance.now();
-    ui.total.textContent = fmt(totalSecs);
-    const tick = () => {
-      const elapsed = (performance.now() - t0) / 1000;
-      const pct = Math.min(100, (elapsed / totalSecs) * 100);
-      ui.fill.style.width = pct.toFixed(2) + '%';
-      ui.bar.setAttribute('aria-valuenow', String(Math.round(pct)));
-      ui.elapsed.textContent = fmt(Math.min(elapsed, totalSecs));
-      updateSection(elapsed);
-    };
-    tick();
-    progressTimer = setInterval(tick, 500);
-  }
-
-  /** Show the section playing at `elapsed` s ("Variazione III · pizzicato"), with a short fade. */
-  function updateSection(elapsed) {
-    if (!ui.section) return;
-    const t = elapsed - SECTION_LEAD_SECS;
-    const sec = sectionTimeline && (sectionTimeline.filter(s => t >= s.atSecs - 0.05).pop() || sectionTimeline[0]);
-    const text = sec ? sec.text : '';
-    if (text === shownSection) return;
-    shownSection = text;
-    ui.section.hidden = !text;
-    ui.section.classList.add('is-changing');
-    setTimeout(() => {
-      if (shownSection !== text) return;
-      ui.section.textContent = text;
-      ui.section.classList.remove('is-changing');
-    }, shownSection && ui.section.textContent ? 400 : 0);
-  }
-
-  function setSections(articulation) {
-    sectionTimeline = articulation && articulation.sections && articulation.sections.length
-      ? articulation.sections.map(s => ({ atSecs: s.atSecs, endSecs: s.endSecs, text: s.text }))
-      : null;
-    shownSection = null;
-    if (ui.section) {
-      ui.section.textContent = '';
-      ui.section.hidden = true;
-    }
-  }
-
-  function stopProgress() {
-    if (progressTimer) clearInterval(progressTimer);
-    progressTimer = null;
-  }
-
-  function resetProgress() {
-    stopProgress();
-    ui.fill.style.width = '0%';
-    ui.bar.setAttribute('aria-valuenow', '0');
-    ui.elapsed.textContent = '0:00';
-    ui.total.textContent = '–:––';
+  function announce() {
+    window.dispatchEvent(new CustomEvent('bach:kiosk', { detail: { active } }));
   }
 
   // ---- The loop ------------------------------------------------------------
@@ -449,10 +348,8 @@ document.addEventListener('DOMContentLoaded', () => {
       let choices = null;
       try {
         choices = randomizeAll();
-        resetProgress();
         showCard(choices, null);
-        setSections(null);
-        setState('Componendo… (composing)');
+        setState('Componiendo…');
 
         // The kiosk picks its own (global) profile: the listener's per-voice choices are
         // ignored for its pieces (and left untouched in the page for after the kiosk)
@@ -465,17 +362,11 @@ document.addEventListener('DOMContentLoaded', () => {
         failures = 0;
         pieceNo++;
         showCard(choices, result.data, result.continuo);
-        setSections(result.articulation);
-        setState(player.isMidiEnabled() ? 'In esecuzione · MIDI' : 'In esecuzione');
-        startProgress(result.durationSecs);
+        setState(player.isMidiEnabled() ? 'Sonando · MIDI' : 'Sonando');
 
         const natural = await result.finished;
-        stopProgress();
         if (!active || myRun !== runId) break;
-        if (natural) {
-          ui.fill.style.width = '100%';
-          setState('Intermezzo…');
-        }
+        if (natural) setState('Intermedio…');
         if (!(await sleep(PAUSE_BETWEEN_PIECES_MS, myRun))) break;
       } catch (err) {
         if (!active || myRun !== runId) break;
@@ -483,8 +374,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const wait = Math.min(RETRY_MAX_MS, RETRY_BASE_MS * Math.pow(2, failures - 1));
         console.error(`Kiosk: piece ${pieceNo + 1} failed (attempt ${failures}); retrying in ${wait / 1000} s`, err);
         try { player.stopPlayback(); } catch (e) { console.warn('Kiosk: stop after error failed', e); }
-        stopProgress();
-        setState(`Un momento… (${err && err.message ? err.message : 'error'}) — riprovo tra ${Math.round(wait / 1000)} s`);
+        setState(`Un momento… (${err && err.message ? err.message : 'error'}) — reintento en ${Math.round(wait / 1000)} s`);
         if (!(await sleep(wait, myRun))) break;
       }
     }
@@ -565,10 +455,9 @@ document.addEventListener('DOMContentLoaded', () => {
     try { player.stopPlayback(); } catch (e) { /* nothing playing */ }
 
     document.body.classList.add('kiosk-on');
-    stage.hidden = false;
     if (kioskBtn) kioskBtn.setAttribute('aria-pressed', 'true');
-    if (exitBtn) exitBtn.focus({ preventScroll: true });
     window.scrollTo({ top: 0 });
+    announce();
 
     loop(runId).catch(err => {
       // Should be unreachable (loop catches everything), but never die silently.
@@ -586,8 +475,6 @@ document.addEventListener('DOMContentLoaded', () => {
     active = false;
     runId++;
     if (wakeSleep) wakeSleep();
-    stopProgress();
-    setSections(null);
     try { player.stopPlayback(); } catch (e) { console.warn('Kiosk: stop failed', e); }
     if (player.setStereoLayout) player.setStereoLayout(null);  // back to the style's default seating
     restoreSeedUi();
@@ -595,13 +482,14 @@ document.addEventListener('DOMContentLoaded', () => {
     exitFullscreenIfOurs();
 
     document.body.classList.remove('kiosk-on');
-    stage.hidden = true;
+    setState('');
     if (kioskBtn) {
       kioskBtn.setAttribute('aria-pressed', 'false');
       kioskBtn.focus({ preventScroll: true });
     }
     const status = $('status');
-    if (status) status.innerText = 'Kiosk stopped — Ready';
+    if (status) status.innerText = 'Concierto detenido — Listo';
+    announce();
   }
 
   // ---- "Tap to begin" overlay (for ?kiosk URLs) ---------------------------------

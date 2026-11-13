@@ -1,1598 +1,1032 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="es">
 
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bach Generator</title>
-    <link rel="icon" type="image/x-icon" href="/favicon.ico">
-    <link rel="shortcut icon" type="image/x-icon" href="/favicon.ico">
+    <title>Barroco Estocástico</title>
+    <link rel="icon" type="image/svg+xml" href="favicon.svg">
+    <link rel="alternate icon" type="image/x-icon" href="favicon.ico">
+    <link rel="apple-touch-icon" href="favicon.svg">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet"
-        href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;0,700;1,500&family=EB+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=IM+Fell+English:ital@0;1&display=swap">
+        href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=Inter:wght@300;400;500;600&display=swap">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/abcjs@6.2.3/dist/abcjs-basic-min.js"></script>
     <script type="module" src="/src/browser.js"></script>
+    <script type="module" src="/ui/main.js"></script>
     <style>
-        /* =========================================================
-           1. TOKENS — parchment (light) / candlelit (dark)
-           ========================================================= */
+        /* Look of barroco estocástico: parchment, burgundy and gold, Playfair / Cormorant / Inter */
         :root {
-            color-scheme: light;
-
-            --bg: #f1e6cc;
-            --leaf: #f8f0dc;
-            --panel: #fbf5e6;
-            --field: #fffaf0;
-            --ink: #2b1d14;
-            --ink-soft: #5c4632;
-            --accent: #6e1423;          /* burgundy text accents */
-            --accent-strong: #4a0d17;
-            --wax: #7a1a2a;             /* button fill */
-            --wax-deep: #4a0d17;
-            --wax-text: #f6e3a8;
-            --gold: #b8892b;
-            --gold-dark: #7a5716;       /* gold used as text (AA on parchment) */
-            --gold-soft: rgba(184, 137, 43, 0.45);
-            --track: #6e1423;
-            --shadow: rgba(74, 45, 15, 0.18);
-            --vignette: rgba(110, 70, 25, 0.20);
-            --glow: rgba(255, 251, 238, 0.75);
-
-            --gilt: linear-gradient(135deg, #6f4f12 0%, #c99a3a 22%, #f3dc94 40%, #b8892b 58%, #e9c977 78%, #7a5716 100%);
-            --gilt-line: linear-gradient(90deg, transparent, #b8892b 20%, #f0d68a 50%, #b8892b 80%, transparent);
-            --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .36 0 0 0 0 .25 0 0 0 0 .12 .22 0 0 0 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-
-            --font-display: 'Cormorant Garamond', 'EB Garamond', Garamond, 'Times New Roman', serif;
-            --font-body: 'EB Garamond', Garamond, 'Times New Roman', serif;
-            --font-period: 'IM Fell English', 'EB Garamond', Garamond, serif;
-            --font-mono: ui-monospace, 'Cascadia Mono', Consolas, 'Courier New', monospace;
+            --burgundy: #5a1a2b;
+            --burgundy-deep: #3d0f1d;
+            --burgundy-light: #7a2a3d;
+            --gold: #d4af37;
+            --gold-light: #e8c97a;
+            --gold-deep: #a8842a;
+            --gold-text: #7d6118;   /* gold as text on parchment (AA) */
+            --cream: #f5ecd9;
+            --parchment: #faf4e4;
+            --paper: #fffdf6;
+            --ink: #2b1810;
+            --ink-soft: #4a3528;
+            --line: rgba(212, 175, 55, 0.35);
+            --shadow-soft: 0 8px 24px rgba(45, 24, 16, 0.12);
+            --shadow-gold: 0 4px 18px rgba(212, 175, 55, 0.25);
+            --serif-display: 'Playfair Display', 'Cormorant Garamond', Georgia, serif;
+            --serif: 'Cormorant Garamond', Garamond, Georgia, serif;
+            --sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            --mono: ui-monospace, 'Cascadia Mono', Consolas, monospace;
         }
 
-        @media (prefers-color-scheme: dark) {
-            :root {
-                color-scheme: dark;
+        *, *::before, *::after { box-sizing: border-box; }
 
-                --bg: #140e0a;
-                --leaf: #1a130e;
-                --panel: #201712;
-                --field: #2a1f17;
-                --ink: #efe1c1;
-                --ink-soft: #c9b48f;
-                --accent: #dcb662;
-                --accent-strong: #f0d68a;
-                --wax: #6b1322;
-                --wax-deep: #3d0a13;
-                --wax-text: #f6e3a8;
-                --gold: #c99a3a;
-                --gold-dark: #dcb662;
-                --gold-soft: rgba(201, 154, 58, 0.40);
-                --track: #8a2234;
-                --shadow: rgba(0, 0, 0, 0.55);
-                --vignette: rgba(0, 0, 0, 0.65);
-                --glow: rgba(230, 170, 70, 0.10);
-                --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .95 0 0 0 0 .8 0 0 0 0 .55 .06 0 0 0 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-            }
-        }
+        html { -webkit-text-size-adjust: 100%; }
 
-        /* =========================================================
-           2. PAGE & PARCHMENT
-           ========================================================= */
-        *,
-        *::before,
-        *::after {
-            box-sizing: border-box;
-        }
-
-        html {
-            -webkit-text-size-adjust: 100%;
-        }
-
-        body {
+        html, body {
             margin: 0;
-            padding: 2rem 1rem 3rem;
-            font-family: var(--font-body);
-            font-size: 1.0625rem;
-            line-height: 1.5;
+            padding: 0;
+            min-height: 100vh;
+            font-family: var(--sans);
             color: var(--ink);
-            background-color: var(--bg);
+            background-color: var(--parchment);
             background-image:
-                var(--grain),
-                radial-gradient(ellipse 70% 45% at 50% 0%, var(--glow), transparent 70%),
-                radial-gradient(ellipse 120% 90% at 50% 50%, transparent 55%, var(--vignette) 100%);
-            background-attachment: fixed;
-            overflow-x: hidden;
+                radial-gradient(at 20% 10%, rgba(212, 175, 55, 0.08) 0px, transparent 50%),
+                radial-gradient(at 80% 90%, rgba(90, 26, 43, 0.06) 0px, transparent 50%),
+                url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200' viewBox='0 0 200 200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.2  0 0 0 0 0.1  0 0 0 0 0.05  0 0 0 0.04 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
         }
 
-        .container {
-            max-width: 960px;
+        body { overflow-x: hidden; }
+
+        .grain-overlay {
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            opacity: 0.4;
+            mix-blend-mode: multiply;
+            z-index: 1000;
+            background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/><feColorMatrix values='0 0 0 0 0.15  0 0 0 0 0.08  0 0 0 0 0.04  0 0 0 0.06 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+        }
+
+        .page {
+            position: relative;
+            z-index: 1;
+            max-width: 1240px;
             margin: 0 auto;
+            padding: 0.75rem 1rem 1rem;
+        }
+
+        h1, h2, h3, h4 { font-family: var(--serif-display); letter-spacing: 0.01em; }
+
+        :focus-visible { outline: 2px solid var(--gold-deep); outline-offset: 3px; }
+
+        [hidden] { display: none !important; }
+
+        .ornament {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 14px;
+            color: var(--gold-deep);
+            margin: 0.4rem 0;
+        }
+        .ornament::before, .ornament::after {
+            content: "";
+            flex: 0 1 80px;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, var(--gold), transparent);
+        }
+        .ornament svg { width: 26px; height: 26px; flex-shrink: 0; }
+
+        /* ============ HERO (slideshow behind) ============ */
+        .hero {
             text-align: center;
+            padding: 3rem 1rem 2rem;
+            position: relative;
+            min-height: 300px;
+            overflow: hidden;
+            border-radius: 14px;
+            margin-bottom: 1.5rem;
+            border: 1px solid var(--line);
+            box-shadow: var(--shadow-soft);
+            background: var(--cream);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
         }
-
-        :focus-visible {
-            outline: 2px solid var(--gold);
-            outline-offset: 3px;
+        .hero::after {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(180deg,
+                rgba(250, 244, 228, 0.40) 0%, rgba(250, 244, 228, 0.62) 40%, rgba(250, 244, 228, 0.82) 100%);
+            z-index: 1;
+            pointer-events: none;
         }
-
-        /* =========================================================
-           3. FRONTISPIECE
-           ========================================================= */
-        .frontispiece {
-            margin: 0 auto 2rem;
-            padding: 0 0.5rem;
+        .hero-slide {
+            position: absolute;
+            inset: 0;
+            opacity: 0;
+            transition: opacity 8s ease-in-out;
+            z-index: 0;
         }
-
-        .frontispiece .overline {
-            margin: 0 0 0.6rem;
-            font-family: var(--font-display);
-            font-variant: small-caps;
-            letter-spacing: 0.28em;
-            font-size: 0.95rem;
-            color: var(--gold-dark);
+        .hero-slide.active { opacity: 1; }
+        .hero-slide img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            object-position: center 30%;
+            display: block;
         }
+        .hero-slide.active img { animation: rise-to-center 8s ease-in-out forwards; }
+        @keyframes rise-to-center {
+            0% { object-position: var(--start-x, 50%) 50%; }
+            100% { object-position: var(--start-x, 50%) var(--end-y, 90%); }
+        }
+        @media (min-aspect-ratio: 21/9) {
+            .hero-slide.contain-wide img { object-fit: contain; background: var(--parchment); }
+            .hero-slide.contain-wide.active img { animation: none; }
+        }
+        .hero-content { position: relative; z-index: 2; }
 
-        h1 {
+        .hero h1 {
+            font-size: clamp(2.1rem, 5vw, 3.6rem);
+            font-weight: 700;
+            font-style: italic;
+            color: var(--burgundy);
             margin: 0;
-            font-family: var(--font-display);
-            font-weight: 600;
-            font-size: clamp(2.1rem, 6vw, 3.6rem);
             line-height: 1.1;
-            letter-spacing: 0.02em;
+            text-shadow: 0 2px 4px rgba(90, 26, 43, 0.08), 0 0 20px rgba(250, 244, 228, 0.8), 0 0 40px rgba(250, 244, 228, 0.6);
+        }
+        .hero .subtitle {
+            font-family: var(--serif);
+            font-size: 1.15rem;
+            font-style: italic;
+            color: var(--ink-soft);
+            letter-spacing: 0.06em;
+            margin: 0.4rem auto 0;
+            max-width: 40rem;
+            text-shadow: 0 0 12px rgba(250, 244, 228, 0.9);
+        }
+
+        /* Now playing (every piece, manual or concierto perpetuo) */
+        .now-playing { margin-top: 1.1rem; text-shadow: 0 0 14px rgba(250, 244, 228, 0.95); }
+        body.has-piece .hero .subtitle { display: none; }
+        body.has-piece .hero h1 { font-size: clamp(1.15rem, 2.4vw, 1.5rem); letter-spacing: 0.06em; }
+        .np-kicker {
+            margin: 0 0 0.35rem;
+            font-family: var(--serif);
+            font-variant: small-caps;
+            letter-spacing: 0.2em;
+            font-size: 0.95rem;
+            color: var(--gold-text);
+        }
+        .np-title {
+            margin: 0;
+            font-size: clamp(1.6rem, 4.2vw, 2.7rem);
+            font-weight: 600;
+            font-style: italic;
+            color: var(--burgundy);
+            line-height: 1.15;
+            overflow-wrap: anywhere;
+        }
+        .np-author {
+            margin: 0.35rem 0 0;
+            font-family: var(--serif);
+            font-size: clamp(1.15rem, 2.4vw, 1.45rem);
+            font-weight: 600;
             color: var(--ink);
         }
-
-        h1 .initial {
-            font-family: var(--font-period);
-            font-weight: 400;
-            font-size: 1.55em;
-            line-height: 0;
-            vertical-align: -0.1em;
-            margin-right: 0.02em;
-            color: var(--accent);
-            text-shadow: 1px 1px 0 var(--gold-soft);
-        }
-
-        .frontispiece .subtitle {
-            margin: 0.7rem auto 0;
-            max-width: 34rem;
-            font-family: var(--font-period);
+        .np-subtitle {
+            margin: 0.25rem 0 0;
+            font-family: var(--serif);
             font-style: italic;
-            font-size: 1.15rem;
+            font-size: 1.1rem;
+            color: var(--ink-soft);
+        }
+        .np-section {
+            display: inline-block;
+            margin: 0.6rem 0 0;
+            padding: 0.15rem 0.9rem;
+            border: 1px solid var(--line);
+            border-radius: 999px;
+            background: rgba(255, 253, 246, 0.7);
+            font-family: var(--serif);
+            font-size: 1rem;
+            color: var(--burgundy);
+        }
+        .np-details, .np-state, .np-seed {
+            margin: 0.4rem auto 0;
+            max-width: 46rem;
+            font-family: var(--serif);
+            font-size: 0.98rem;
+            color: var(--ink-soft);
+        }
+        .np-state { font-style: italic; color: var(--burgundy); }
+        .np-seed { font-family: var(--mono); font-size: 0.75rem; opacity: 0.75; overflow-wrap: anywhere; }
+        .np-details:empty, .np-state:empty, .np-seed:empty, .np-kicker .kiosk-only:empty { display: none; }
+        body:not(.kiosk-on) .kiosk-only { display: none; }
+
+        /* ============ BUTTONS ============ */
+        .start-row {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 0.75rem;
+            margin-bottom: 1.5rem;
+        }
+        .btn-start {
+            font-family: var(--serif);
+            font-weight: 700;
+            font-size: 1.5rem;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            padding: 0.8rem 2.8rem;
+            border-radius: 50px;
+            border: 1px solid var(--gold-deep);
+            display: inline-flex;
+            align-items: center;
+            gap: 0.6rem;
+            background: linear-gradient(135deg, var(--burgundy) 0%, var(--burgundy-deep) 100%);
+            color: var(--gold-light);
+            box-shadow: 0 4px 14px rgba(90, 26, 43, 0.3);
+            transition: all 0.25s ease;
+            cursor: pointer;
+        }
+        .btn-start:hover:not(:disabled) {
+            background: linear-gradient(135deg, var(--burgundy-light) 0%, var(--burgundy) 100%);
+            color: #fff;
+            transform: translateY(-1px);
+        }
+        .btn-start.playing {
+            background: linear-gradient(135deg, #9d0208 0%, #6a040f 100%);
+            color: #ffd6d6;
+            border-color: #d62828;
+            animation: start-pulse 2.5s ease-in-out infinite;
+        }
+        @keyframes start-pulse {
+            0%, 100% { box-shadow: 0 4px 14px rgba(157, 2, 8, 0.3); }
+            50% { box-shadow: 0 4px 26px rgba(157, 2, 8, 0.55); }
+        }
+        .btn-start .glyph { font-size: 0.8em; }
+        .btn-start.playing .glyph::before { content: "■"; }
+        .btn-start:not(.playing) .glyph::before { content: "▶"; }
+        .start-hint {
+            flex-basis: 100%;
+            text-align: center;
+            margin: 0;
+            font-family: var(--serif);
+            font-style: italic;
             color: var(--ink-soft);
         }
 
-        .frontispiece .motto {
-            margin: 0.4rem 0 0;
-            font-family: var(--font-display);
-            font-variant: small-caps;
-            letter-spacing: 0.35em;
-            font-size: 0.9rem;
-            color: var(--accent);
-        }
-
-        /* Fleuron divider: ——— ❧ ——— */
-        .fleuron {
-            display: flex;
+        .btn-baroque {
+            font-family: var(--serif);
+            font-weight: 600;
+            font-size: 1.05rem;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            padding: 0.6rem 1.3rem;
+            border-radius: 8px;
+            border: 1px solid transparent;
+            transition: all 0.2s ease;
+            display: inline-flex;
             align-items: center;
-            gap: 0.9rem;
-            max-width: 26rem;
-            margin: 1.6rem auto;
-            color: var(--gold);
-            font-size: 1.5rem;
-            line-height: 1;
-            font-family: 'Segoe UI Symbol', 'DejaVu Sans', var(--font-body);
+            justify-content: center;
+            gap: 0.5rem;
+            cursor: pointer;
+        }
+        .btn-baroque:disabled { opacity: 0.45; cursor: not-allowed; }
+        .btn-primary-baroque {
+            background: linear-gradient(135deg, var(--burgundy) 0%, var(--burgundy-deep) 100%);
+            color: var(--gold-light);
+            border-color: var(--gold-deep);
+            box-shadow: 0 4px 12px rgba(90, 26, 43, 0.25);
+        }
+        .btn-primary-baroque:hover:not(:disabled) {
+            background: linear-gradient(135deg, var(--burgundy-light) 0%, var(--burgundy) 100%);
+            color: #fff;
+        }
+        .btn-quiet {
+            background: var(--paper);
+            color: var(--burgundy);
+            border-color: rgba(90, 26, 43, 0.3);
+            text-transform: none;
+            letter-spacing: 0.03em;
+            font-size: 1rem;
+        }
+        .btn-quiet:hover:not(:disabled) { border-color: var(--gold-deep); background: #fff; }
+        .btn-stop {
+            background: linear-gradient(135deg, #9d0208 0%, #6a040f 100%);
+            color: #ffd6d6;
+            border-color: #d62828;
         }
 
-        .fleuron::before,
-        .fleuron::after {
-            content: "";
-            flex: 1;
-            height: 1px;
-            background: var(--gilt-line);
+        /* ============ PROGRESS ============ */
+        .progress-frame {
+            background: linear-gradient(180deg, var(--paper) 0%, var(--cream) 100%);
+            border: 1px solid rgba(212, 175, 55, 0.4);
+            border-radius: 12px;
+            padding: 12px 16px;
+            margin-bottom: 1.5rem;
+            box-shadow: var(--shadow-soft);
         }
-
-        .frontispiece .fleuron {
-            margin: 1rem auto 0;
+        .progress-track {
+            height: 10px;
+            background: rgba(90, 26, 43, 0.08);
+            border-radius: 6px;
+            overflow: hidden;
         }
-
-        /* =========================================================
-           4. CARTOUCHE (main control area)
-           ========================================================= */
-        .cartouche {
-            position: relative;
-            padding: 2.25rem 2rem 2rem;
-            border: 3px solid transparent;
-            border-radius: 4px;
-            background:
-                linear-gradient(var(--panel), var(--panel)) padding-box,
-                var(--gilt) border-box;
-            box-shadow: 0 10px 30px var(--shadow), 0 1px 0 rgba(255, 255, 255, 0.25) inset;
-        }
-
-        /* inner hairline = gilded double rule */
-        .cartouche::before {
-            content: "";
-            position: absolute;
-            inset: 7px;
-            border: 1px solid var(--gold-soft);
-            border-radius: 2px;
-            pointer-events: none;
-        }
-
-        .corner {
-            position: absolute;
-            width: 54px;
-            height: 54px;
-            color: var(--gold);
-            pointer-events: none;
-        }
-
-        .corner svg {
-            display: block;
-            width: 100%;
+        .progress-fill {
             height: 100%;
+            width: 0%;
+            background: linear-gradient(90deg, var(--burgundy) 0%, var(--gold) 50%, var(--burgundy) 100%);
+            background-size: 200% 100%;
+            border-radius: 6px;
+            transition: width 0.25s linear;
+            animation: shimmer 3s linear infinite;
         }
-
-        .corner.tl { top: -3px; left: -3px; }
-        .corner.tr { top: -3px; right: -3px; transform: scaleX(-1); }
-        .corner.bl { bottom: -3px; left: -3px; transform: scaleY(-1); }
-        .corner.br { bottom: -3px; right: -3px; transform: scale(-1, -1); }
-
-        .cartouche-title {
-            margin: 0 0 1.25rem;
-            font-family: var(--font-display);
-            font-variant: small-caps;
-            font-weight: 600;
-            font-size: 1.15rem;
-            letter-spacing: 0.22em;
-            color: var(--accent);
-        }
-
-        .control-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(min(100%, 9.5rem), 1fr));
-            gap: 1rem 1.1rem;
-            text-align: left;
-        }
-
-        .field {
+        @keyframes shimmer { 0% { background-position: 0% 0; } 100% { background-position: 200% 0; } }
+        .progress-meta {
             display: flex;
-            flex-direction: column;
-            gap: 0.3rem;
-            min-width: 0;
-        }
-
-        .field-label {
-            font-family: var(--font-display);
-            font-variant: small-caps;
-            font-weight: 600;
-            letter-spacing: 0.12em;
+            justify-content: space-between;
+            gap: 1rem;
+            margin-top: 8px;
+            font-family: var(--serif);
             font-size: 1rem;
             color: var(--ink-soft);
         }
+        .progress-meta strong { color: var(--burgundy); font-weight: 700; }
 
-        /* Per-voice articulation: a compact row of four small selects under the grid */
-        .voice-arts {
+        /* ============ PANELS ============ */
+        .panel {
+            background: linear-gradient(180deg, var(--paper) 0%, var(--cream) 100%);
+            border: 1px solid var(--line);
+            border-radius: 14px;
+            padding: 1.5rem 1.75rem;
+            margin-bottom: 1.5rem;
+            box-shadow: var(--shadow-soft);
+            position: relative;
             min-width: 0;
-            margin: 1.1rem 0 0;
-            padding: 0.55rem 0.9rem 0.75rem;
-            text-align: left;
-            border: 1px solid var(--gold-soft);
-            border-radius: 3px;
         }
-
-        .voice-arts legend {
-            padding: 0 0.45rem;
+        .panel::before {
+            content: "";
+            position: absolute;
+            inset: 6px;
+            border: 1px solid rgba(212, 175, 55, 0.18);
+            border-radius: 10px;
+            pointer-events: none;
         }
-
-        .voice-arts-grid {
-            display: grid;
-            grid-template-columns: repeat(4, minmax(0, 1fr));
-            gap: 0.55rem 0.8rem;
-        }
-
-        .voice-art {
+        .panel-title {
+            font-size: 1.35rem;
+            font-weight: 600;
+            color: var(--burgundy);
+            margin: 0 0 1.1rem;
             display: flex;
-            flex-direction: column;
-            gap: 0.15rem;
+            align-items: center;
+            gap: 0.6rem;
+        }
+        .panel-title .mark { color: var(--gold-deep); font-size: 0.9em; }
+
+        .workshop-title {
+            text-align: center;
+            margin: 0.5rem 0 1.25rem;
+            font-size: 1.6rem;
+            font-style: italic;
+            color: var(--burgundy);
+        }
+        .panels-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr));
+            gap: 0 1.5rem;
+        }
+
+        /* ============ FIELDS ============ */
+        .field-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(min(100%, 170px), 1fr));
+            gap: 1rem 1.25rem;
+        }
+        .field { display: flex; flex-direction: column; min-width: 0; }
+        .field-label, .panel label.stack > span:first-child {
+            font-family: var(--serif);
+            font-size: 1.05rem;
+            font-weight: 600;
+            color: var(--ink);
+            letter-spacing: 0.04em;
+            margin-bottom: 0.35rem;
+            display: block;
+        }
+        .stack { display: flex; flex-direction: column; margin-bottom: 1rem; min-width: 0; }
+        select, input[type="text"] {
+            font-family: var(--sans);
+            font-size: 0.95rem;
+            background-color: var(--paper);
+            border: 1px solid rgba(90, 26, 43, 0.25);
+            border-radius: 8px;
+            padding: 0.5rem 0.8rem;
+            color: var(--ink);
+            width: 100%;
             min-width: 0;
+            transition: border-color 0.2s ease, box-shadow 0.2s ease;
         }
-
-        .voice-art-name {
-            font-family: var(--font-period);
+        select:focus, input[type="text"]:focus {
+            border-color: var(--gold);
+            box-shadow: 0 0 0 0.2rem rgba(212, 175, 55, 0.18);
+            outline: none;
+            background-color: #fff;
+        }
+        select option:disabled { color: #9a8a7a; }
+        .hint {
+            display: block;
+            margin-top: 0.3rem;
+            font-family: var(--serif);
             font-style: italic;
-            font-size: 0.98rem;
-            color: var(--accent);
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-
-        select.voice-art-select {
-            padding: 0.35rem 1.9rem 0.35rem 0.55rem;
-            font-size: 0.98rem;
-        }
-
-        /* a voice with a manner of its own is marked with the wax rule of the voice panels */
-        select.voice-art-select.is-own {
-            border-left: 3px solid var(--wax);
-        }
-
-        .voice-arts-hint {
-            margin: 0.45rem 0 0;
-            font-style: italic;
-            font-size: 0.88rem;
+            font-size: 0.95rem;
             color: var(--ink-soft);
         }
 
-        /* Row that holds the main action(s). Kiosk/autoplay toggle can sit here. */
-        .play-row {
+        .check-row {
             display: flex;
-            flex-wrap: wrap;
-            align-items: center;
-            justify-content: center;
-            gap: 1rem 1.5rem;
-            margin-top: 1.75rem;
-        }
-
-        /* =========================================================
-           5. FORM CONTROLS
-           ========================================================= */
-        select,
-        input[type="text"] {
-            font-family: var(--font-body);
+            align-items: flex-start;
+            gap: 0.55rem;
+            margin: 0 0 0.7rem;
+            font-family: var(--serif);
             font-size: 1.05rem;
             color: var(--ink);
-            background-color: var(--field);
-            border: 1px solid var(--gold-soft);
-            border-bottom-color: var(--gold);
-            border-radius: 3px;
-            padding: 0.55rem 0.7rem;
-            box-shadow: inset 0 1px 3px var(--shadow);
-            transition: border-color 0.15s, box-shadow 0.15s;
-            max-width: 100%;
-        }
-
-        select {
-            -webkit-appearance: none;
-            appearance: none;
-            width: 100%;
-            padding-right: 2.2rem;
             cursor: pointer;
-            background-image:
-                linear-gradient(45deg, transparent 50%, var(--accent) 50%),
-                linear-gradient(135deg, var(--accent) 50%, transparent 50%);
-            background-position:
-                calc(100% - 1.05rem) 52%,
-                calc(100% - 0.7rem) 52%;
-            background-size: 0.35rem 0.35rem, 0.35rem 0.35rem;
-            background-repeat: no-repeat;
+        }
+        .check-row input {
+            accent-color: var(--burgundy);
+            width: 1.05em;
+            height: 1.05em;
+            margin-top: 0.22em;
+            flex-shrink: 0;
         }
 
-        select option {
-            background: var(--field);
-            color: var(--ink);
+        .value-pill {
+            display: inline-block;
+            background: var(--burgundy);
+            color: var(--gold-light);
+            font-family: var(--sans);
+            font-size: 0.78rem;
+            font-weight: 600;
+            padding: 2px 9px;
+            border-radius: 10px;
+            margin-left: 6px;
+            letter-spacing: 0.03em;
         }
 
-        select:hover,
-        input[type="text"]:hover {
-            border-color: var(--gold);
-        }
-
-        select:focus-visible,
-        input[type="text"]:focus-visible {
-            outline: none;
-            border-color: var(--gold);
-            box-shadow: inset 0 1px 3px var(--shadow), 0 0 0 3px var(--gold-soft);
-        }
-
-        input[type="checkbox"] {
-            accent-color: var(--wax);
-            width: 1.05rem;
-            height: 1.05rem;
-            margin: 0 0.55rem 0 0;
-            flex: none;
-            cursor: pointer;
-            vertical-align: -0.15em;
-        }
-
-        @media (prefers-color-scheme: dark) {
-            input[type="checkbox"] {
-                accent-color: var(--gold);
-            }
-        }
-
-        /* Range: burgundy track, gilded thumb */
         input[type="range"] {
             -webkit-appearance: none;
             appearance: none;
             width: 100%;
-            height: 1.4rem;
-            margin: 0.35rem 0 0;
-            background: transparent;
+            height: 6px;
+            margin: 0.6rem 0 0.2rem;
+            background: linear-gradient(90deg, var(--burgundy) 0%, var(--burgundy) var(--val, 50%), rgba(90, 26, 43, 0.15) var(--val, 50%), rgba(90, 26, 43, 0.15) 100%);
+            border-radius: 3px;
+            outline: none;
             cursor: pointer;
         }
-
-        input[type="range"]::-webkit-slider-runnable-track {
-            height: 6px;
-            border-radius: 3px;
-            background: linear-gradient(var(--track), var(--wax-deep));
-            box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.35), 0 0 0 1px var(--gold-soft);
-        }
-
-        input[type="range"]::-moz-range-track {
-            height: 6px;
-            border-radius: 3px;
-            background: linear-gradient(var(--track), var(--wax-deep));
-            box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.35), 0 0 0 1px var(--gold-soft);
-        }
-
-        input[type="range"]::-moz-range-progress {
-            height: 6px;
-            border-radius: 3px;
-            background: var(--gilt);
-        }
-
         input[type="range"]::-webkit-slider-thumb {
             -webkit-appearance: none;
             appearance: none;
             width: 20px;
             height: 20px;
-            margin-top: -7px;
+            background: radial-gradient(circle at 30% 30%, var(--gold-light), var(--gold-deep));
+            border: 2px solid var(--burgundy);
             border-radius: 50%;
-            border: 1px solid #5a3f0e;
-            background: radial-gradient(circle at 35% 30%, #fbeab0 0%, #d9ad4f 40%, #b8892b 62%, #6f4f12 100%);
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
-            transition: transform 0.12s;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
         }
-
         input[type="range"]::-moz-range-thumb {
             width: 20px;
             height: 20px;
+            background: radial-gradient(circle at 30% 30%, var(--gold-light), var(--gold-deep));
+            border: 2px solid var(--burgundy);
             border-radius: 50%;
-            border: 1px solid #5a3f0e;
-            background: radial-gradient(circle at 35% 30%, #fbeab0 0%, #d9ad4f 40%, #b8892b 62%, #6f4f12 100%);
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
-            transition: transform 0.12s;
         }
 
-        input[type="range"]:hover::-webkit-slider-thumb,
-        input[type="range"]:focus-visible::-webkit-slider-thumb {
-            transform: scale(1.15);
+        /* Articulation per voice */
+        .voice-arts {
+            margin: 1.25rem 0 0;
+            padding: 0.9rem 1rem 0.6rem;
+            border: 1px solid var(--line);
+            border-radius: 10px;
+            min-width: 0;
         }
-
-        input[type="range"]:hover::-moz-range-thumb,
-        input[type="range"]:focus-visible::-moz-range-thumb {
-            transform: scale(1.15);
+        .voice-arts legend { padding: 0 0.4rem; margin: 0; }
+        .voice-arts-grid {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 0.75rem;
         }
-
-        input[type="range"]:focus-visible {
-            outline: none;
-        }
-
-        input[type="range"]:focus-visible::-webkit-slider-thumb {
-            box-shadow: 0 0 0 4px var(--gold-soft), 0 1px 3px rgba(0, 0, 0, 0.45);
-        }
-
-        input[type="range"]:focus-visible::-moz-range-thumb {
-            box-shadow: 0 0 0 4px var(--gold-soft), 0 1px 3px rgba(0, 0, 0, 0.45);
-        }
-
-        /* =========================================================
-           6. BUTTONS
-           ========================================================= */
-        button {
-            font-family: var(--font-display);
-            cursor: pointer;
-        }
-
-        /* Gilded plaque with wax-red field — primary action */
-        .btn-plaque {
-            position: relative;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            gap: 0.7rem;
-            min-height: 3.25rem;
-            padding: 0.7rem 2.2rem;
-            font-size: 1.3rem;
-            font-weight: 700;
-            font-variant: small-caps;
-            letter-spacing: 0.14em;
-            color: var(--wax-text);
-            text-shadow: 0 1px 1px rgba(0, 0, 0, 0.5);
-            border: 3px solid transparent;
-            border-radius: 999px;
-            background:
-                radial-gradient(ellipse at 50% 30%, #a3283d 0%, var(--wax) 55%, var(--wax-deep) 100%) padding-box,
-                var(--gilt) border-box;
-            box-shadow:
-                inset 0 0 0 1px rgba(246, 227, 168, 0.35),
-                inset 0 -3px 6px rgba(0, 0, 0, 0.35),
-                0 4px 12px var(--shadow);
-            transition: transform 0.15s, filter 0.15s, box-shadow 0.15s;
-        }
-
-        .btn-plaque::before,
-        .btn-plaque::after {
-            content: "❦";
-            font-family: 'Segoe UI Symbol', 'DejaVu Sans', serif;
-            font-size: 0.85em;
-            font-variant: normal;
-            color: #e9c977;
-        }
-
-        .btn-plaque::after {
-            transform: scaleX(-1);
-        }
-
-        .btn-plaque:hover:not(:disabled) {
-            filter: brightness(1.12);
-            transform: translateY(-1px);
-            box-shadow:
-                inset 0 0 0 1px rgba(246, 227, 168, 0.5),
-                inset 0 -3px 6px rgba(0, 0, 0, 0.35),
-                0 8px 18px var(--shadow);
-        }
-
-        .btn-plaque:active:not(:disabled) {
-            transform: translateY(1px);
-            filter: brightness(0.95);
-        }
-
-        .btn-plaque:focus-visible {
-            outline: 3px solid var(--gold);
-            outline-offset: 4px;
-        }
-
-        .btn-plaque:disabled {
-            cursor: progress;
-            filter: saturate(0.4) brightness(0.85);
-        }
-
-        /* Quiet gilt-edged button — secondary actions */
-        .btn-quiet {
-            padding: 0.5rem 1.3rem;
-            font-size: 1.05rem;
-            font-weight: 600;
-            font-variant: small-caps;
-            letter-spacing: 0.1em;
-            color: var(--accent);
-            background: var(--field);
-            border: 1px solid var(--gold);
-            border-radius: 3px;
-            box-shadow: inset 0 0 0 2px var(--field), inset 0 0 0 3px var(--gold-soft);
-            transition: background 0.15s, color 0.15s;
-        }
-
-        .btn-quiet:hover:not(:disabled) {
-            background: var(--wax);
-            color: var(--wax-text);
-            box-shadow: inset 0 0 0 2px var(--wax), inset 0 0 0 3px rgba(233, 201, 119, 0.6);
-        }
-
-        .btn-quiet:disabled {
-            opacity: 0.55;
-            cursor: not-allowed;
-        }
-
-        /* =========================================================
-           7. STATUS (inscription under the cartouche)
-           ========================================================= */
-        #status {
-            margin: 1.4rem auto 0;
-            max-width: 40rem;
-            padding: 0.8rem 1rem;
-            font-family: var(--font-period);
-            font-style: italic;
-            font-size: 1.05rem;
-            line-height: 1.6;
+        .voice-art { display: flex; flex-direction: column; min-width: 0; }
+        .voice-art-name {
+            font-family: var(--serif);
+            font-size: 0.98rem;
             color: var(--ink-soft);
-            border-top: 1px solid var(--gold-soft);
-            border-bottom: 1px solid var(--gold-soft);
+            margin-bottom: 0.25rem;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .voice-art-select.is-own { border-color: var(--burgundy); box-shadow: inset 3px 0 0 var(--burgundy); }
+        .voice-arts-hint { margin: 0.5rem 0 0; font-family: var(--serif); font-style: italic; color: var(--ink-soft); }
+
+        .play-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.75rem;
+            margin-top: 1.25rem;
+        }
+        .play-row .btn-primary-baroque { flex: 1 1 14rem; }
+
+        #status {
+            margin: 1rem 0 0;
+            padding: 0.6rem 0.9rem;
+            border-left: 3px solid var(--gold-deep);
+            background: rgba(255, 253, 246, 0.7);
+            font-family: var(--serif);
+            font-size: 1rem;
+            color: var(--ink-soft);
             overflow-wrap: anywhere;
         }
+        #status strong { color: var(--burgundy); }
+        #seedDisplay { margin-top: 0.6rem; font-family: var(--mono); font-size: 0.8rem; color: var(--ink-soft); overflow-wrap: anywhere; }
 
-        #status strong {
-            font-family: var(--font-display);
-            font-style: normal;
-            font-variant: small-caps;
-            font-weight: 700;
-            letter-spacing: 0.06em;
-            color: var(--accent);
-        }
-
-        /* =========================================================
-           8. PANELS (gilded double-rule)
-           ========================================================= */
-        .panels {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
-            gap: 1.25rem;
-            text-align: left;
-        }
-
-        .panel,
-        .reverb-controls,
-        .midi-controls,
-        .seed-controls {
-            position: relative;
-            margin: 0;
-            padding: 1.4rem 1.4rem 1.3rem;
-            text-align: left;
-            background-color: var(--panel);
-            border: 3px double var(--gold);
-            border-radius: 2px;
-            box-shadow: 0 0 0 4px var(--panel), 0 0 0 5px var(--gold-soft), 0 6px 18px var(--shadow);
-        }
-
-        .wide-panels {
-            display: grid;
-            gap: 1.75rem;
-            margin-top: 0;
-        }
-
-        .reverb-controls h3,
-        .midi-controls h3,
-        .seed-controls h3 {
-            margin: 0 0 1rem;
-            text-align: center;
-            font-family: var(--font-display);
-            font-variant: small-caps;
-            font-weight: 600;
-            font-size: 1.3rem;
-            letter-spacing: 0.16em;
-            color: var(--accent);
-        }
-
-        .reverb-controls h3::after,
-        .midi-controls h3::after,
-        .seed-controls h3::after {
-            content: "";
-            display: block;
-            width: 4.5rem;
-            height: 1px;
-            margin: 0.35rem auto 0;
-            background: var(--gilt-line);
-        }
-
-        .reverb-controls label,
-        .midi-device-container label,
-        .stack-label {
-            display: block;
-            margin: 0.8rem 0;
-            text-align: left;
-            font-size: 1rem;
-            color: var(--ink);
-        }
-
-        .reverb-controls select,
-        .midi-device-container select {
-            display: block;
-            width: 100%;
-            margin: 0.4rem 0 0;
-        }
-
-        label.check-row {
-            display: flex;
-            align-items: flex-start;
-            margin: 0.6rem 0;
+        /* MIDI (collapsed) */
+        details.panel > summary {
             cursor: pointer;
-            line-height: 1.4;
+            list-style: none;
         }
-
-        .check-row input[type="checkbox"] {
-            margin-top: 0.15rem;
-        }
-
-        .reverb-mix-container {
-            margin-top: 0.6rem;
-        }
-
-        .reverb-mix-container label {
-            display: flex;
-            align-items: baseline;
-            justify-content: space-between;
-            gap: 0.75rem;
-            margin: 0 0 0.25rem;
-        }
-
-        .reverb-mix-value {
-            font-family: var(--font-display);
-            font-weight: 700;
-            font-size: 1.1rem;
-            color: var(--gold-dark);
-            min-width: 3.5rem;
-            text-align: right;
-            white-space: nowrap;
-            font-variant-numeric: oldstyle-nums;
-        }
-
-        .hint {
-            display: block;
-            margin-top: 0.5rem;
-            font-style: italic;
-            font-size: 0.92rem;
-            color: var(--ink-soft);
-        }
-
-        /* =========================================================
-           9. MIDI
-           ========================================================= */
-        .midi-device-container {
-            margin: 1rem 0;
-        }
-
-        .midi-voice-controls {
-            margin-top: 1.5rem;
-        }
-
-        .midi-voice-controls h4 {
-            margin: 0 0 0.9rem;
-            text-align: center;
-            font-family: var(--font-display);
-            font-variant: small-caps;
-            font-weight: 600;
-            font-size: 1.1rem;
-            letter-spacing: 0.14em;
-            color: var(--ink-soft);
-        }
-
+        details.panel > summary::-webkit-details-marker { display: none; }
+        details.panel > summary .panel-title { margin: 0; }
+        details.panel > summary .panel-title::after { content: "▸"; margin-left: auto; color: var(--gold-deep); }
+        details.panel[open] > summary .panel-title::after { content: "▾"; }
+        details.panel[open] > summary { margin-bottom: 1.1rem; }
         .voice-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
             gap: 1rem;
         }
-
         .voice-control {
-            padding: 0.9rem 1rem 1rem;
-            background: var(--field);
-            border: 1px solid var(--gold-soft);
-            border-left: 3px solid var(--wax);
-            border-radius: 2px;
+            padding: 0.75rem 0.9rem;
+            border: 1px solid var(--line);
+            border-radius: 10px;
+            background: rgba(255, 253, 246, 0.6);
         }
+        .voice-control h5 { margin: 0 0 0.5rem; font-family: var(--serif-display); font-size: 1.05rem; color: var(--burgundy); }
+        .voice-control label { display: block; margin-bottom: 0.4rem; font-family: var(--serif); font-size: 1rem; }
+        .voice-control select { width: auto; padding: 0.2rem 0.5rem; }
+        .voice-control input[type="range"] { width: calc(100% - 3rem); vertical-align: middle; }
+        .voice-control .midi-volume-value, .voice-control .midi-pan-value { font-family: var(--mono); font-size: 0.8rem; }
+        .midi-auto-pan { margin-top: 1rem; }
 
-        .voice-control h5 {
-            margin: 0 0 0.6rem;
-            font-family: var(--font-period);
-            font-weight: 400;
-            font-style: italic;
-            font-size: 1.15rem;
-            color: var(--accent);
-        }
-
-        .control-row {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 0.75rem 1rem;
-            align-items: flex-start;
-        }
-
-        .control-row label {
-            display: flex;
-            flex-direction: column;
-            flex: 1 1 7.5rem;
-            min-width: 0;
-            margin: 0;
-            font-family: var(--font-display);
-            font-variant: small-caps;
-            font-weight: 600;
-            letter-spacing: 0.06em;
-            font-size: 0.98rem;
-            color: var(--ink-soft);
-        }
-
-        .midi-channel-select {
-            margin-top: 0.3rem;
-            padding: 0.35rem 2rem 0.35rem 0.55rem;
-            font-size: 0.98rem;
-        }
-
-        .midi-volume-slider,
-        .midi-pan-slider {
-            margin-top: 0.3rem;
-        }
-
-        .midi-volume-value,
-        .midi-pan-value {
-            align-self: flex-end;
-            font-family: var(--font-display);
-            font-variant: normal;
-            font-weight: 700;
-            color: var(--gold-dark);
-            min-width: 2rem;
-            text-align: right;
-            font-variant-numeric: oldstyle-nums;
-        }
-
-        .midi-auto-pan {
-            margin-top: 1.1rem;
-            text-align: center;
-        }
-
-        /* =========================================================
-           10. SEED
-           ========================================================= */
-        .seed-controls input[type="text"] {
-            display: block;
-            width: 100%;
-            max-width: 30rem;
-            margin: 0.5rem 0 0;
-            font-family: var(--font-mono);
-            font-size: 0.92rem;
-        }
-
-        #seedDisplay {
-            margin-top: 0.9rem;
-            font-family: var(--font-mono);
-            font-size: 0.85rem;
-            color: var(--ink-soft);
-            word-break: break-all;
-        }
-
-        /* =========================================================
-           11. COLOPHON
-           ========================================================= */
-        .colophon {
-            margin-top: 0.5rem;
-            font-family: var(--font-period);
-            font-style: italic;
-            font-size: 0.95rem;
-            color: var(--ink-soft);
-        }
-
-        /* =========================================================
-           11b. KIOSK (endless autoplay)
-           ========================================================= */
-        .kiosk-stage[hidden],
-        .kiosk-overlay[hidden] {
-            display: none !important;
-        }
-
-        /* While active, only the frontispiece and the now-playing card remain */
-        body.kiosk-on .container > :not(.frontispiece):not(#kioskStage) {
-            display: none !important;
-        }
-
-        body.kiosk-on .frontispiece .subtitle,
-        body.kiosk-on .frontispiece .motto {
-            display: none;
-        }
-
-        body.kiosk-on .frontispiece {
-            margin-bottom: 1.5rem;
-        }
-
-        body.kiosk-armed {
-            overflow: hidden;
-        }
-
-        .kiosk-stage {
-            max-width: 46rem;
-            margin: 0 auto;
-            padding: 2.75rem 2.5rem 2.25rem;
-            text-align: center;
-        }
-
-        .kiosk-kicker {
-            margin: 0 0 0.75rem;
-            font-family: var(--font-display);
-            font-variant: small-caps;
-            letter-spacing: 0.28em;
-            font-size: 1rem;
-            color: var(--gold-dark);
-        }
-
-        .kiosk-title {
-            margin: 0;
-            font-family: var(--font-period);
-            font-weight: 400;
-            font-size: clamp(2.1rem, 7vw, 3.8rem);
-            line-height: 1.1;
-            color: var(--accent);
-            text-shadow: 1px 1px 0 var(--gold-soft);
-            overflow-wrap: anywhere;
-        }
-
-        .kiosk-subtitle {
-            margin: 0.7rem 0 0;
-            font-family: var(--font-display);
-            font-style: italic;
-            font-weight: 500;
-            font-size: clamp(1.2rem, 3.6vw, 1.6rem);
-            color: var(--ink);
-        }
-
-        .kiosk-stage .kiosk-fleuron {
-            margin: 1.1rem auto;
-            max-width: 18rem;
-        }
-
-        .kiosk-section {
-            margin: 0.45rem 0 0;
-            font-family: var(--font-period);
-            font-style: italic;
-            font-size: clamp(1rem, 2.8vw, 1.2rem);
-            color: var(--accent);
-            transition: opacity 0.6s ease;
-        }
-
-        .kiosk-section.is-changing {
-            opacity: 0;
-        }
-
-        .kiosk-details {
-            margin: 0 auto;
-            max-width: 36rem;
-            font-family: var(--font-display);
-            font-variant: small-caps;
-            letter-spacing: 0.08em;
-            font-size: 1.05rem;
-            color: var(--ink-soft);
-        }
-
-        .kiosk-progress {
+        /* ============ SCORE ============ */
+        .staff-header { text-align: center; margin-bottom: 0.9rem; }
+        .staff-title { font-family: var(--serif-display); font-size: 1.4rem; font-weight: 600; font-style: italic; color: var(--burgundy); }
+        .staff-byline { font-family: var(--serif); font-style: italic; font-size: 1.05rem; color: var(--ink-soft); }
+        .staff-meta { font-family: var(--serif); font-size: 0.95rem; color: var(--ink-soft); opacity: 0.8; }
+        .staff-frame {
+            background: var(--paper);
+            border: 1px solid var(--line);
+            border-radius: 12px;
+            padding: 0.75rem 0;
+            box-shadow: var(--shadow-soft);
+            min-height: 180px;
+            /* Scroll viewer: the whole piece is ONE horizontal system (#staffNotation as wide
+               as the piece is long); ui/score.js moves it with translateX during playback. */
             position: relative;
-            height: 8px;
-            margin: 1.6rem auto 0;
-            max-width: 32rem;
-            border-radius: 4px;
-            background: linear-gradient(var(--track), var(--wax-deep));
-            box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.35), 0 0 0 1px var(--gold-soft);
             overflow: hidden;
         }
-
-        .kiosk-progress-fill {
-            display: block;
-            width: 0%;
-            height: 100%;
-            background: var(--gilt);
-            transition: width 0.5s linear;
-        }
-
-        .kiosk-time {
-            margin: 0.5rem 0 0;
-            font-family: var(--font-display);
-            font-weight: 600;
-            font-size: 1.05rem;
-            color: var(--gold-dark);
-            font-variant-numeric: oldstyle-nums tabular-nums;
-        }
-
-        .kiosk-state {
-            min-height: 1.6em;
-            margin: 0.9rem 0 0;
-            font-family: var(--font-period);
+        .staff-frame .empty {
+            font-family: var(--serif);
             font-style: italic;
-            font-size: 1.1rem;
             color: var(--ink-soft);
-        }
-
-        .kiosk-seed {
-            margin: 0.4rem 0 0;
-            font-family: var(--font-mono);
-            font-size: 0.8rem;
-            color: var(--ink-soft);
-            opacity: 0.8;
-            word-break: break-all;
-        }
-
-        .kiosk-actions {
-            display: flex;
-            flex-wrap: wrap;
-            align-items: center;
-            justify-content: center;
-            gap: 0.5rem 1rem;
-            margin-top: 1.5rem;
-        }
-
-        .kiosk-actions .hint {
+            opacity: 0.7;
+            text-align: center;
+            padding: 3rem 1rem;
             margin: 0;
+            max-width: calc(100vw - 4rem);  /* #staffNotation is max-content wide */
+        }
+        #staffNotation { width: max-content; min-width: 100%; will-change: transform; }
+        .staff-frame svg { display: block; max-width: none; }
+        .staff-frame::after {
+            content: "";
+            position: absolute;
+            inset: 0;
+            border-radius: 12px;
+            background: linear-gradient(90deg,
+                var(--paper) 0%, rgba(255, 253, 246, 0) 28px,
+                rgba(255, 253, 246, 0) calc(100% - 28px), var(--paper) 100%);
+            pointer-events: none;
+            z-index: 2;
+        }
+        /* The reading point (30% of the viewer): where the sounding beat sits */
+        .staff-frame::before {
+            content: "";
+            position: absolute;
+            top: 8px;
+            bottom: 8px;
+            left: 30%;
+            width: 2px;
+            background: linear-gradient(180deg, transparent, rgba(193, 18, 31, 0.25), transparent);
+            z-index: 1;
+            pointer-events: none;
+        }
+        #staffNotation .note-played, #staffNotation .note-played path { fill: #c1121f; stroke: #c1121f; }
+
+        footer.colophon {
+            text-align: center;
+            padding: 1.5rem 0 2rem;
+            font-family: var(--serif);
+            font-style: italic;
+            color: var(--ink-soft);
+            opacity: 0.75;
         }
 
-        /* "Tap to begin" — full-screen parchment / candlelit veil */
+        /* ============ CONCIERTO PERPETUO (kiosk) ============ */
+        body.kiosk-on .workshop { display: none; }
+        body.kiosk-on .hero { min-height: min(56vh, 560px); }
+        body.kiosk-on .np-title { font-size: clamp(1.8rem, 5vw, 3.2rem); }
+
         .kiosk-overlay {
             position: fixed;
             inset: 0;
-            z-index: 1000;
+            z-index: 2000;
             display: flex;
             align-items: center;
             justify-content: center;
-            width: 100%;
-            height: 100%;
-            margin: 0;
             padding: 1rem;
             border: 0;
-            color: var(--ink);
-            text-align: center;
             cursor: pointer;
-            background-color: var(--bg);
-            background-image:
-                var(--grain),
-                radial-gradient(ellipse 60% 45% at 50% 45%, var(--glow), transparent 70%),
-                radial-gradient(ellipse 120% 90% at 50% 50%, transparent 50%, var(--vignette) 100%);
+            color: var(--ink);
+            background: rgba(250, 244, 228, 0.92);
+            backdrop-filter: blur(3px);
+            font: inherit;
         }
-
-        .kiosk-overlay:focus-visible {
-            outline: none;
-        }
-
-        .kiosk-overlay:focus-visible .kiosk-overlay-frame {
-            box-shadow: 0 10px 30px var(--shadow), 0 0 0 4px var(--gold-soft);
-        }
-
         .kiosk-overlay-frame {
-            position: relative;
             display: flex;
             flex-direction: column;
             align-items: center;
-            gap: 0.4rem;
-            width: min(100%, 34rem);
-            padding: 2.5rem 1.5rem 2.25rem;
-            border: 3px solid transparent;
-            border-radius: 4px;
-            background:
-                linear-gradient(var(--panel), var(--panel)) padding-box,
-                var(--gilt) border-box;
-            box-shadow: 0 10px 30px var(--shadow);
+            gap: 0.5rem;
+            max-width: 34rem;
+            padding: 2.5rem 2rem;
+            border: 1px solid var(--line);
+            border-radius: 14px;
+            background: linear-gradient(180deg, var(--paper) 0%, var(--cream) 100%);
+            box-shadow: var(--shadow-soft);
         }
-
-        .kiosk-overlay-frame::before {
-            content: "";
-            position: absolute;
-            inset: 7px;
-            border: 1px solid var(--gold-soft);
-            border-radius: 2px;
-            pointer-events: none;
-        }
-
-        .kiosk-overlay-overline {
-            font-family: var(--font-display);
-            font-variant: small-caps;
-            letter-spacing: 0.28em;
-            font-size: 0.95rem;
-            color: var(--gold-dark);
-        }
-
-        .kiosk-overlay-title {
-            font-family: var(--font-display);
-            font-weight: 600;
-            font-size: clamp(2rem, 8vw, 3.2rem);
-            line-height: 1.15;
-        }
-
-        .kiosk-overlay-title .initial {
-            font-family: var(--font-period);
-            font-weight: 400;
-            font-size: 1.4em;
-            line-height: 0;
-            color: var(--accent);
-            text-shadow: 1px 1px 0 var(--gold-soft);
-        }
-
-        .kiosk-overlay .fleuron {
-            width: 100%;
-            max-width: 16rem;
-            margin: 0.6rem auto;
-        }
-
+        .kiosk-overlay-title { font-family: var(--serif-display); font-style: italic; font-weight: 700; font-size: clamp(2rem, 7vw, 3rem); color: var(--burgundy); }
         .kiosk-overlay-cta {
-            font-family: var(--font-display);
-            font-variant: small-caps;
+            margin-top: 0.75rem;
+            padding: 0.6rem 2.2rem;
+            border-radius: 50px;
+            border: 1px solid var(--gold-deep);
+            background: linear-gradient(135deg, var(--burgundy) 0%, var(--burgundy-deep) 100%);
+            color: var(--gold-light);
+            font-family: var(--serif);
             font-weight: 700;
-            letter-spacing: 0.2em;
-            font-size: clamp(1.3rem, 4.5vw, 1.7rem);
-            color: var(--accent);
-            animation: kiosk-breathe 2.8s ease-in-out infinite;
+            font-size: 1.3rem;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
         }
+        .kiosk-overlay-sub { font-family: var(--serif); font-style: italic; font-size: 1.1rem; color: var(--ink-soft); }
+        body.kiosk-armed { overflow: hidden; }
 
-        .kiosk-overlay-sub {
-            font-family: var(--font-period);
-            font-style: italic;
-            font-size: 1.05rem;
-            color: var(--ink-soft);
-        }
-
-        @keyframes kiosk-breathe {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.55; }
-        }
-
-        /* =========================================================
-           12. SMALL SCREENS
-           ========================================================= */
-        @media (max-width: 600px) {
-            body {
-                padding: 1.25rem 0.75rem 2rem;
-            }
-
-            .cartouche {
-                padding: 1.9rem 1.1rem 1.5rem;
-            }
-
-            .corner {
-                width: 38px;
-                height: 38px;
-            }
-
-            .panel,
-            .reverb-controls,
-            .midi-controls,
-            .seed-controls {
-                padding: 1.15rem 1rem 1.1rem;
-            }
-
-            .btn-plaque {
-                width: 100%;
-                padding: 0.7rem 1.2rem;
-                font-size: 1.2rem;
-            }
-
-            .voice-arts-grid {
-                grid-template-columns: repeat(2, minmax(0, 1fr));
-            }
-
-            .kiosk-stage {
-                padding: 2.1rem 1.1rem 1.6rem;
-            }
-
-            .kiosk-kicker {
-                letter-spacing: 0.18em;
-            }
+        @media (max-width: 640px) {
+            .page { padding: 0.5rem 0.75rem 1rem; }
+            .panel { padding: 1.15rem 1.1rem; }
+            .hero { padding: 2rem 0.9rem 1.5rem; min-height: 240px; }
+            .btn-start { font-size: 1.25rem; padding: 0.7rem 2rem; }
+            .voice-arts-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+            .progress-meta { font-size: 0.92rem; }
         }
 
         @media (prefers-reduced-motion: reduce) {
-            * {
-                transition: none !important;
-            }
-
-            .kiosk-overlay-cta {
-                animation: none;
-            }
+            .hero-slide { transition-duration: 1.5s; }
+            .hero-slide.active img, .btn-start.playing, .progress-fill { animation: none; }
         }
     </style>
 </head>
 
 <body>
-    <!-- Corner flourish, reused by the cartouche -->
-    <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
-        <symbol id="cornerFlourish" viewBox="0 0 60 60">
-            <g fill="none" stroke="currentColor" stroke-linecap="round">
-                <path d="M3 57 V22 C3 11 11 3 22 3 H57" stroke-width="2.2" />
-                <path d="M10 46 V25 C10 16.5 16.5 10 25 10 H46" stroke-width="1" />
-                <path d="M17 33 C17 23 23 17 33 17 C28 21 27 27 30 30 C33 33 37 31 37 27" stroke-width="1.3" />
-                <path d="M33 17 C23 17 17 23 17 33 C21 28 27 27 30 30" stroke-width="1.3" opacity=".7" />
-            </g>
-            <circle cx="3" cy="3" r="2.6" fill="currentColor" />
-            <circle cx="52" cy="10" r="1.5" fill="currentColor" />
-            <circle cx="10" cy="52" r="1.5" fill="currentColor" />
-        </symbol>
-    </svg>
+    <div class="grain-overlay" aria-hidden="true"></div>
 
-    <!-- Shown for ?kiosk / #kiosk URLs: audio needs a user gesture before it can start -->
-    <button id="kioskOverlay" class="kiosk-overlay" type="button" hidden aria-label="Tap to begin the endless concert">
+    <!-- ?kiosk / #kiosk: the browser only starts audio after a gesture -->
+    <button id="kioskOverlay" class="kiosk-overlay" type="button" hidden aria-label="Tocá para empezar el concierto perpetuo">
         <span class="kiosk-overlay-frame">
-            <span class="kiosk-overlay-overline">Opus Algorithmicum</span>
-            <span class="kiosk-overlay-title"><span class="initial">C</span>oncerto perpetuo</span>
-            <span class="fleuron" aria-hidden="true">❦</span>
-            <span class="kiosk-overlay-cta">Tap to begin</span>
-            <span class="kiosk-overlay-sub">An endless sequence of pieces, each composed anew</span>
+            <span class="ornament" aria-hidden="true"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2 L13.5 9 L21 10.5 L13.5 12 L12 19 L10.5 12 L3 10.5 L10.5 9 Z" opacity="0.85"/><circle cx="12" cy="12" r="1.5"/></svg></span>
+            <span class="kiosk-overlay-title">Concierto perpetuo</span>
+            <span class="kiosk-overlay-sub">Una sucesión sin fin de piezas, cada una compuesta de nuevo</span>
+            <span class="kiosk-overlay-cta">Tocá para empezar</span>
         </span>
     </button>
 
-    <div class="container">
-        <header class="frontispiece">
-            <p class="overline">Opus Algorithmicum</p>
-            <h1><span class="initial">B</span>ach-Style Generator</h1>
-            <p class="subtitle">Chorales, Preludes, Fugues &amp; Suites composed anew after the manner of
-                J.&nbsp;S.&nbsp;Bach</p>
-            <p class="motto">Soli Deo Gloria</p>
-            <div class="fleuron" aria-hidden="true">❦</div>
+    <div class="page">
+        <!-- HERO (slideshow behind, now playing in front) -->
+        <header class="hero" id="heroSlideshow">
+            <div class="hero-content">
+                <div class="ornament" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2 L13.5 9 L21 10.5 L13.5 12 L12 19 L10.5 12 L3 10.5 L10.5 9 Z" opacity="0.85"/><circle cx="12" cy="12" r="1.5"/></svg>
+                </div>
+                <h1><em>Barroco</em> Estocástico</h1>
+                <p class="subtitle">— Corales, preludios, fugas y suites compuestos de nuevo a la manera de J.&nbsp;S.&nbsp;Bach —</p>
+                <div id="nowPlaying" class="now-playing" aria-live="polite" hidden>
+                    <p class="np-kicker"><span class="kiosk-only">Concierto perpetuo · <span id="kioskCount"></span></span></p>
+                    <h2 id="pieceTitle" class="np-title"></h2>
+                    <p id="pieceAuthor" class="np-author"></p>
+                    <p id="pieceSubtitle" class="np-subtitle"></p>
+                    <p id="pieceSection" class="np-section" hidden></p>
+                    <p id="kioskDetails" class="np-details kiosk-only"></p>
+                    <p id="kioskState" class="np-state kiosk-only" role="status"></p>
+                    <p id="kioskSeed" class="np-seed kiosk-only"></p>
+                </div>
+            </div>
         </header>
 
-        <section class="controls cartouche" aria-label="Composition">
-            <span class="corner tl" aria-hidden="true"><svg><use href="#cornerFlourish" /></svg></span>
-            <span class="corner tr" aria-hidden="true"><svg><use href="#cornerFlourish" /></svg></span>
-            <span class="corner bl" aria-hidden="true"><svg><use href="#cornerFlourish" /></svg></span>
-            <span class="corner br" aria-hidden="true"><svg><use href="#cornerFlourish" /></svg></span>
+        <div class="start-row">
+            <button id="kioskBtn" class="btn-start" type="button" aria-pressed="false"
+                title="Concierto perpetuo: una pieza tras otra, cada una con ajustes al azar (Esc para salir)">
+                <span class="glyph" aria-hidden="true"></span><span id="kioskBtnLabel">Iniciar</span>
+            </button>
+            <button id="fullscreenBtn" class="btn-baroque btn-quiet" type="button" aria-pressed="false" title="Pantalla completa">⛶ Pantalla completa</button>
+            <p class="start-hint">«Iniciar» toca piezas sin fin con ajustes al azar; abajo, el taller compone una con los tuyos.</p>
+        </div>
 
-            <h2 class="cartouche-title">The Composition</h2>
-            <div class="control-grid">
-                <label class="field">
-                    <span class="field-label">Key</span>
-                    <select id="keySelect">
-                        <option value="C">C</option>
-                        <option value="C#">C♯ / D♭</option>
-                        <option value="D">D</option>
-                        <option value="Eb">E♭</option>
-                        <option value="E">E</option>
-                        <option value="F">F</option>
-                        <option value="F#">F♯ / G♭</option>
-                        <option value="G">G</option>
-                        <option value="Ab">A♭</option>
-                        <option value="A">A</option>
-                        <option value="Bb">B♭</option>
-                        <option value="B">B</option>
-                    </select>
-                </label>
-                <label class="field">
-                    <span class="field-label">Mode</span>
-                    <select id="modeSelect">
-                        <option value="major">Major</option>
-                        <option value="minor">Minor</option>
-                    </select>
-                </label>
-                <label class="field">
-                    <span class="field-label">Form</span>
-                    <select id="formSelect">
-                        <option value="Chorale">Chorale</option>
-                        <option value="Prelude">Prelude</option>
-                        <option value="Fugue">Fugue</option>
-                        <option value="Ritornello">Ritornello</option>
-                        <option value="Variations">Variations</option>
-                        <option value="Suite">Suite</option>
-                    </select>
-                </label>
-                <label class="field">
-                    <span class="field-label">Ensemble</span>
-                    <select id="styleSelect">
-                        <option value="Strings">Strings (Quartet)</option>
-                        <option value="Woodwinds">Woodwinds (Quartet)</option>
-                        <option value="Brass">Brass (Quartet)</option>
-                        <option value="Harp">Harp (Solo)</option>
-                        <option value="Mixed">Mixed Orchestra</option>
-                        <optgroup label="Harpsichord (VCSL)">
-                            <option value="HarpsichordFull" disabled>Harpsichord, Flemish (8' + 4')</option>
-                            <option value="Harpsichord8" disabled>Harpsichord, Flemish (8')</option>
-                        </optgroup>
-                        <optgroup label="Velocity layers (VSCO)">
-                            <option value="VscoWoodwinds" disabled>VSCO Woodwinds</option>
-                            <option value="VscoBrass" disabled>VSCO Brass</option>
-                            <option value="VscoStrings" disabled>VSCO Strings (Quartet)</option>
-                        </optgroup>
-                        <optgroup label="Baroque ensembles (VSCO)">
-                            <option value="VscoOboeStrings" disabled>Oboe &amp; Strings</option>
-                            <option value="VscoFluteStrings" disabled>Flute &amp; Strings</option>
-                            <option value="VscoTrumpetStrings" disabled>Trumpet &amp; Strings</option>
-                            <option value="VscoOboeBassoon" disabled>Oboe, Strings &amp; Bassoon</option>
-                        </optgroup>
-                    </select>
-                </label>
-                <label class="field" title="How each note is played. Auto follows Baroque practice and gives each section (variation, fugal episode, solo / tutti) its own character. Real articulation samples need a VSCO ensemble; other ensembles only shorten the detached notes.">
-                    <span class="field-label">Articulation</span>
-                    <select id="articulationSelect">
-                        <option value="auto">Auto (Baroque practice)</option>
-                        <option value="legato">Legato</option>
-                        <option value="detached">Detached</option>
-                        <option value="pizzicato">Pizzicato</option>
-                    </select>
-                </label>
-                <label class="field">
-                    <span class="field-label">Length</span>
-                    <select id="durationSelect">
-                        <option value="1">Short (~1m)</option>
-                        <option value="3">Medium (~3m)</option>
-                        <option value="5">Long (~5m)</option>
-                    </select>
-                </label>
-            </div>
-            <fieldset class="voice-arts" id="voiceArts"
-                title="Give one voice its own articulation on top of the Articulation selector (e.g. a pizzicato bass). Auto follows the selector.">
-                <legend class="field-label">Articulation per voice</legend>
-                <div class="voice-arts-grid">
-                    <label class="voice-art">
-                        <span class="voice-art-name" data-voice="0">Soprano</span>
-                        <select class="voice-art-select" data-voice="0" aria-label="Articulation of voice 1 (soprano)">
-                            <option value="auto">Auto</option>
-                            <option value="legato">Legato</option>
-                            <option value="detached">Detached</option>
-                            <option value="pizzicato">Pizzicato</option>
-                        </select>
-                    </label>
-                    <label class="voice-art">
-                        <span class="voice-art-name" data-voice="1">Alto</span>
-                        <select class="voice-art-select" data-voice="1" aria-label="Articulation of voice 2 (alto)">
-                            <option value="auto">Auto</option>
-                            <option value="legato">Legato</option>
-                            <option value="detached">Detached</option>
-                            <option value="pizzicato">Pizzicato</option>
-                        </select>
-                    </label>
-                    <label class="voice-art">
-                        <span class="voice-art-name" data-voice="2">Tenor</span>
-                        <select class="voice-art-select" data-voice="2" aria-label="Articulation of voice 3 (tenor)">
-                            <option value="auto">Auto</option>
-                            <option value="legato">Legato</option>
-                            <option value="detached">Detached</option>
-                            <option value="pizzicato">Pizzicato</option>
-                        </select>
-                    </label>
-                    <label class="voice-art">
-                        <span class="voice-art-name" data-voice="3">Bass</span>
-                        <select class="voice-art-select" data-voice="3" aria-label="Articulation of voice 4 (bass)">
-                            <option value="auto">Auto</option>
-                            <option value="legato">Legato</option>
-                            <option value="detached">Detached</option>
-                            <option value="pizzicato">Pizzicato</option>
-                        </select>
-                    </label>
-                </div>
-                <p id="voiceArtsHint" class="voice-arts-hint">Auto follows the Articulation above.</p>
-            </fieldset>
-            <div class="play-row">
-                <button id="playBtn" class="btn-plaque">Generate &amp; Play</button>
-                <button id="kioskBtn" class="btn-quiet" type="button" aria-pressed="false"
-                    title="Endless autoplay: every piece with random settings (Esc to exit)">Kiosk · Perpetuo</button>
-            </div>
-        </section>
-
-        <section id="kioskStage" class="kiosk-stage cartouche" aria-label="Now playing" hidden>
-            <span class="corner tl" aria-hidden="true"><svg><use href="#cornerFlourish" /></svg></span>
-            <span class="corner tr" aria-hidden="true"><svg><use href="#cornerFlourish" /></svg></span>
-            <span class="corner bl" aria-hidden="true"><svg><use href="#cornerFlourish" /></svg></span>
-            <span class="corner br" aria-hidden="true"><svg><use href="#cornerFlourish" /></svg></span>
-
-            <p class="kiosk-kicker">Concerto perpetuo · <span id="kioskCount">No. 1</span></p>
-            <h2 id="kioskTitle" class="kiosk-title" aria-live="polite">—</h2>
-            <p id="kioskSubtitle" class="kiosk-subtitle"></p>
-            <p id="kioskSection" class="kiosk-section" aria-live="polite" hidden></p>
-            <div class="fleuron kiosk-fleuron" aria-hidden="true">❦</div>
-            <p id="kioskDetails" class="kiosk-details"></p>
-            <div id="kioskProgress" class="kiosk-progress" role="progressbar" aria-label="Piece progress"
-                aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
-                <span id="kioskProgressFill" class="kiosk-progress-fill"></span>
-            </div>
-            <p class="kiosk-time"><span id="kioskElapsed">0:00</span> / <span id="kioskTotal">–:––</span></p>
-            <p id="kioskState" class="kiosk-state" role="status" aria-live="polite"></p>
-            <p id="kioskSeed" class="kiosk-seed"></p>
-            <div class="kiosk-actions">
-                <button id="kioskExitBtn" class="btn-quiet" type="button">Exit kiosk</button>
-                <small class="hint">or press Esc</small>
-            </div>
-        </section>
-
-        <div id="status" role="status" aria-live="polite">Ready (Click to start audio context)</div>
-
-        <div class="fleuron" aria-hidden="true">❧</div>
-
-        <div class="panels">
-            <div class="reverb-controls">
-                <h3>Expressivity</h3>
-                <label class="stack-label">
-                    Profile (1 per style default):
-                    <select id="expressivityPreset">
-                        <option value="style">Style Default</option>
-                        <option value="delicate">Delicate</option>
-                        <option value="lyrical">Lyrical</option>
-                        <option value="bold">Bold</option>
-                    </select>
-                </label>
-                <label class="check-row">
-                    <input type="checkbox" id="randomTextureCheck" checked>
-                    <span>Pick 1 of 3 textures randomly (space / dynamics / articulation)</span>
-                </label>
-                <label class="check-row">
-                    <input type="checkbox" id="sparseOrnamentsCheck" checked>
-                    <span>Keep ornaments sparse near cadences</span>
-                </label>
-            </div>
-            <div class="reverb-controls">
-                <h3>Ornaments</h3>
-                <div class="reverb-mix-container">
-                    <label>
-                        Ornament Density:
-                        <span class="reverb-mix-value"><span id="ornamentDensityValue">50</span>%</span>
-                    </label>
-                    <input type="range" id="ornamentDensity" min="0" max="100" value="50" step="5"
-                        aria-label="Ornament density">
-                    <small class="hint">Higher = more passing tones, neighbor tones, suspensions</small>
-                </div>
-            </div>
-            <div class="reverb-controls">
-                <h3>Tempo</h3>
-                <div class="reverb-mix-container">
-                    <label>
-                        Beats Per Minute (BPM):
-                        <span class="reverb-mix-value"><span id="tempoValue">120</span> BPM</span>
-                    </label>
-                    <input type="range" id="tempoSlider" min="40" max="200" value="120" step="5"
-                        aria-label="Tempo in beats per minute">
-                    <small class="hint">Adjust playback speed (40–200 BPM)</small>
-                </div>
-            </div>
-            <div class="reverb-controls">
-                <h3>Reverb</h3>
-                <label>
-                    Impulse Response:
-                    <select id="impulseSelect">
-                        <option value="none">No Reverb</option>
-                        <option value="RoomMedium.mp3">Room - Medium</option>
-                        <option value="RoomLarge.mp3">Room - Large</option>
-                        <option value="RoomHuge.mp3">Room - Huge</option>
-                        <option value="RoomConcertHall.mp3" selected>Concert Hall</option>
-                        <option value="RoomPool.mp3">Pool / Bathroom</option>
-                        <option value="PlateSmall.mp3">Plate - Small</option>
-                        <option value="PlateMedium.mp3">Plate - Medium</option>
-                        <option value="PlateLarge.mp3">Plate - Large</option>
-                        <option value="PlateSuperDry.mp3">Plate - Super Dry</option>
-                        <option value="PrimeShort.mp3">Prime - Short</option>
-                        <option value="PrimeMed.mp3">Prime - Medium</option>
-                        <option value="PrimeLong.mp3">Prime - Long</option>
-                        <option value="PrimeXtraLong.mp3">Prime - Extra Long</option>
-                        <option value="AirportTerminal.mp3">Airport Terminal</option>
-                        <option value="CastleThunder.mp3">Castle Thunder</option>
-                        <option value="GiantCave.mp3">Giant Cave</option>
-                        <option value="Hangar.mp3">Hangar</option>
-                        <option value="OutdoorBlastoff.mp3">Outdoor - Blastoff</option>
-                        <option value="OutdoorStadium.mp3">Outdoor - Stadium</option>
-                    </select>
-                </label>
-                <div class="reverb-mix-container">
-                    <label>
-                        Reverb Mix (Wet/Dry):
-                        <span class="reverb-mix-value"><span id="reverbMixValue">25</span>%</span>
-                    </label>
-                    <input type="range" id="reverbMix" min="0" max="100" value="25" step="5"
-                        aria-label="Reverb mix">
-                </div>
+        <div class="progress-frame">
+            <div class="progress-track"><div class="progress-fill" id="progressBar"></div></div>
+            <div class="progress-meta">
+                <span>Compás <strong id="currentBar">0</strong> / <span id="totalBars">–</span></span>
+                <span><span id="elapsedTime">0:00</span> / <span id="totalTime">–:––</span></span>
             </div>
         </div>
 
-        <div class="fleuron" aria-hidden="true">❦</div>
+        <!-- SCORE -->
+        <section class="panel" aria-label="Partitura">
+            <div id="staffHeader" class="staff-header" hidden></div>
+            <div id="staffViewport" class="staff-frame">
+                <div id="staffNotation">
+                    <p class="empty">La partitura aparece acá en cuanto se compone una pieza…</p>
+                </div>
+            </div>
+        </section>
 
-        <div class="wide-panels">
-            <div class="seed-controls">
-                <h3>Variation &amp; Seed</h3>
-                <label class="check-row">
-                    <input type="checkbox" id="randomizeCheck" checked>
-                    <span>Randomize each play (new variation each time)</span>
-                </label>
-                <label class="check-row">
-                    <input type="checkbox" id="useSeedCheck">
-                    <span>Use specific seed (reproducible):</span>
-                </label>
-                <input type="text" id="seedInput" placeholder="Enter seed or leave empty for auto-generate"
-                    aria-label="Seed" />
-                <div id="seedDisplay">Seed: (will generate on play)</div>
+        <!-- WORKSHOP: every control of the generator and the player -->
+        <div class="workshop">
+            <h2 class="workshop-title">El taller</h2>
+
+            <section class="panel" aria-label="Composición">
+                <h3 class="panel-title"><span class="mark">❦</span> Composición</h3>
+                <div class="field-grid">
+                    <label class="field">
+                        <span class="field-label">Tonalidad</span>
+                        <select id="keySelect">
+                            <option value="C">Do</option>
+                            <option value="C#">Do♯ / Re♭</option>
+                            <option value="D">Re</option>
+                            <option value="Eb">Mi♭</option>
+                            <option value="E">Mi</option>
+                            <option value="F">Fa</option>
+                            <option value="F#">Fa♯ / Sol♭</option>
+                            <option value="G">Sol</option>
+                            <option value="Ab">La♭</option>
+                            <option value="A">La</option>
+                            <option value="Bb">Si♭</option>
+                            <option value="B">Si</option>
+                        </select>
+                    </label>
+                    <label class="field">
+                        <span class="field-label">Modo</span>
+                        <select id="modeSelect">
+                            <option value="major">Mayor</option>
+                            <option value="minor">Menor</option>
+                        </select>
+                    </label>
+                    <label class="field">
+                        <span class="field-label">Forma</span>
+                        <select id="formSelect">
+                            <option value="Chorale">Coral</option>
+                            <option value="Prelude">Preludio</option>
+                            <option value="Fugue">Fuga</option>
+                            <option value="Ritornello">Ritornello (concerto)</option>
+                            <option value="Variations">Variaciones</option>
+                            <option value="Passacaglia">Passacaglia</option>
+                            <option value="Suite">Suite</option>
+                        </select>
+                    </label>
+                    <label class="field">
+                        <span class="field-label">Conjunto</span>
+                        <select id="styleSelect">
+                            <option value="Strings">Cuarteto de cuerdas</option>
+                            <option value="Woodwinds">Cuarteto de maderas</option>
+                            <option value="Brass">Cuarteto de metales</option>
+                            <option value="Harp">Arpa</option>
+                            <option value="Mixed">Orquesta mixta</option>
+                            <optgroup label="Clave (VCSL)">
+                                <option value="HarpsichordFull" disabled>Clave flamenco (8′ + 4′)</option>
+                                <option value="Harpsichord8" disabled>Clave flamenco (8′)</option>
+                            </optgroup>
+                            <optgroup label="Capas de dinámica (VSCO)">
+                                <option value="VscoWoodwinds" disabled>Maderas VSCO</option>
+                                <option value="VscoBrass" disabled>Metales VSCO</option>
+                                <option value="VscoStrings" disabled>Cuarteto de cuerdas VSCO</option>
+                            </optgroup>
+                            <optgroup label="Conjuntos barrocos (VSCO)">
+                                <option value="VscoOboeStrings" disabled>Oboe y cuerdas</option>
+                                <option value="VscoFluteStrings" disabled>Flauta y cuerdas</option>
+                                <option value="VscoTrumpetStrings" disabled>Trompeta y cuerdas</option>
+                                <option value="VscoOboeBassoon" disabled>Oboe, cuerdas y fagot</option>
+                            </optgroup>
+                        </select>
+                    </label>
+                    <label class="field" title="Cómo se toca cada nota. Auto sigue la práctica barroca y da a cada sección (variación, episodio fugado, solo / tutti) su carácter. Las articulaciones reales necesitan un conjunto VSCO; los demás solo acortan las notas destacadas.">
+                        <span class="field-label">Articulación</span>
+                        <select id="articulationSelect">
+                            <option value="auto">Auto (práctica barroca)</option>
+                            <option value="legato">Legato</option>
+                            <option value="detached">Destacado</option>
+                            <option value="pizzicato">Pizzicato</option>
+                        </select>
+                    </label>
+                    <label class="field">
+                        <span class="field-label">Duración</span>
+                        <select id="durationSelect">
+                            <option value="1">Breve (~1 min)</option>
+                            <option value="3">Media (~3 min)</option>
+                            <option value="5">Larga (~5 min)</option>
+                        </select>
+                    </label>
+                </div>
+
+                <fieldset class="voice-arts" id="voiceArts"
+                    title="Dale a una voz su propia articulación sobre la general (por ejemplo, un bajo en pizzicato). Auto sigue la general.">
+                    <legend class="field-label">Articulación por voz</legend>
+                    <div class="voice-arts-grid">
+                        <label class="voice-art">
+                            <span class="voice-art-name" data-voice="0">Soprano</span>
+                            <select class="voice-art-select" data-voice="0" aria-label="Articulación de la voz 1 (soprano)">
+                                <option value="auto">Auto</option><option value="legato">Legato</option><option value="detached">Destacado</option><option value="pizzicato">Pizzicato</option>
+                            </select>
+                        </label>
+                        <label class="voice-art">
+                            <span class="voice-art-name" data-voice="1">Contralto</span>
+                            <select class="voice-art-select" data-voice="1" aria-label="Articulación de la voz 2 (contralto)">
+                                <option value="auto">Auto</option><option value="legato">Legato</option><option value="detached">Destacado</option><option value="pizzicato">Pizzicato</option>
+                            </select>
+                        </label>
+                        <label class="voice-art">
+                            <span class="voice-art-name" data-voice="2">Tenor</span>
+                            <select class="voice-art-select" data-voice="2" aria-label="Articulación de la voz 3 (tenor)">
+                                <option value="auto">Auto</option><option value="legato">Legato</option><option value="detached">Destacado</option><option value="pizzicato">Pizzicato</option>
+                            </select>
+                        </label>
+                        <label class="voice-art">
+                            <span class="voice-art-name" data-voice="3">Bajo</span>
+                            <select class="voice-art-select" data-voice="3" aria-label="Articulación de la voz 4 (bajo)">
+                                <option value="auto">Auto</option><option value="legato">Legato</option><option value="detached">Destacado</option><option value="pizzicato">Pizzicato</option>
+                            </select>
+                        </label>
+                    </div>
+                    <p id="voiceArtsHint" class="voice-arts-hint">Auto sigue la articulación general.</p>
+                </fieldset>
+
+                <div class="play-row">
+                    <button id="playBtn" class="btn-baroque btn-primary-baroque" type="button">♪ Componer y tocar</button>
+                    <button id="stopBtn" class="btn-baroque btn-stop" type="button" disabled>■ Detener</button>
+                </div>
+                <div id="status" role="status" aria-live="polite">Listo (el primer clic habilita el audio)</div>
+            </section>
+
+            <div class="panels-grid">
+                <section class="panel" aria-label="Interpretación">
+                    <h3 class="panel-title"><span class="mark">❧</span> Interpretación</h3>
+                    <label class="stack">
+                        <span>Expresividad</span>
+                        <select id="expressivityPreset">
+                            <option value="style">La del conjunto</option>
+                            <option value="delicate">Delicada</option>
+                            <option value="lyrical">Lírica</option>
+                            <option value="bold">Enérgica</option>
+                        </select>
+                    </label>
+                    <label class="check-row">
+                        <input type="checkbox" id="randomTextureCheck" checked>
+                        <span>Elegir al azar 1 de 3 texturas (espacio / dinámica / articulación)</span>
+                    </label>
+                    <label class="check-row">
+                        <input type="checkbox" id="sparseOrnamentsCheck" checked>
+                        <span>Ornamentos sobrios cerca de las cadencias</span>
+                    </label>
+                    <div class="stack">
+                        <span class="field-label">Tempo <span class="value-pill"><span id="tempoValue">120</span> BPM</span></span>
+                        <input type="range" id="tempoSlider" min="40" max="200" value="120" step="5" aria-label="Tempo en pulsos por minuto">
+                        <small class="hint">Negras por minuto (40–200)</small>
+                    </div>
+                    <div class="stack">
+                        <span class="field-label">Densidad de ornamentos <span class="value-pill"><span id="ornamentDensityValue">50</span>%</span></span>
+                        <input type="range" id="ornamentDensity" min="0" max="100" value="50" step="5" aria-label="Densidad de ornamentos">
+                        <small class="hint">Más notas de paso, bordaduras y retardos</small>
+                    </div>
+                </section>
+
+                <section class="panel" aria-label="Sala">
+                    <h3 class="panel-title"><span class="mark">❦</span> Sala</h3>
+                    <label class="stack">
+                        <span>Respuesta al impulso</span>
+                        <select id="impulseSelect">
+                            <option value="none">Sin reverberación</option>
+                            <option value="RoomMedium.mp3">Sala mediana</option>
+                            <option value="RoomLarge.mp3">Sala grande</option>
+                            <option value="RoomHuge.mp3">Sala enorme</option>
+                            <option value="RoomConcertHall.mp3" selected>Sala de conciertos</option>
+                            <option value="RoomPool.mp3">Pileta / baño</option>
+                            <option value="PlateSmall.mp3">Placa chica</option>
+                            <option value="PlateMedium.mp3">Placa mediana</option>
+                            <option value="PlateLarge.mp3">Placa grande</option>
+                            <option value="PlateSuperDry.mp3">Placa muy seca</option>
+                            <option value="PrimeShort.mp3">Prime corta</option>
+                            <option value="PrimeMed.mp3">Prime media</option>
+                            <option value="PrimeLong.mp3">Prime larga</option>
+                            <option value="PrimeXtraLong.mp3">Prime muy larga</option>
+                            <option value="AirportTerminal.mp3">Terminal de aeropuerto</option>
+                            <option value="CastleThunder.mp3">Castillo (trueno)</option>
+                            <option value="GiantCave.mp3">Caverna gigante</option>
+                            <option value="Hangar.mp3">Hangar</option>
+                            <option value="OutdoorBlastoff.mp3">Exterior (despegue)</option>
+                            <option value="OutdoorStadium.mp3">Estadio</option>
+                        </select>
+                    </label>
+                    <div class="stack">
+                        <span class="field-label">Mezcla de reverberación <span class="value-pill"><span id="reverbMixValue">25</span>%</span></span>
+                        <input type="range" id="reverbMix" min="0" max="100" value="25" step="5" aria-label="Mezcla de reverberación">
+                    </div>
+                </section>
+
+                <section class="panel" aria-label="Variación y semilla">
+                    <h3 class="panel-title"><span class="mark">❧</span> Variación y semilla</h3>
+                    <label class="check-row">
+                        <input type="checkbox" id="randomizeCheck" checked>
+                        <span>Una variación nueva en cada pieza</span>
+                    </label>
+                    <label class="check-row">
+                        <input type="checkbox" id="useSeedCheck">
+                        <span>Usar una semilla fija (reproducible):</span>
+                    </label>
+                    <input type="text" id="seedInput" placeholder="Semilla (vacía = automática)" aria-label="Semilla">
+                    <div id="seedDisplay">Semilla: (se genera al tocar)</div>
+                </section>
             </div>
 
-            <div class="midi-controls">
-                <h3>MIDI Output</h3>
+            <details class="panel midi-controls">
+                <summary><h3 class="panel-title"><span class="mark">❦</span> Salida MIDI</h3></summary>
                 <label class="check-row">
                     <input type="checkbox" id="midiEnabledCheck">
-                    <span>Enable MIDI Output</span>
+                    <span>Enviar a un dispositivo MIDI</span>
                 </label>
-                <div class="midi-device-container">
-                    <label>
-                        MIDI Output Device:
-                        <select id="midiOutputSelect">
-                            <option value="">No MIDI devices available</option>
-                        </select>
-                    </label>
-                </div>
-                <div class="midi-voice-controls">
-                    <h4>Voice Settings</h4>
-                    <div class="voice-grid">
-                        <div class="voice-control" data-voice="0">
-                            <h5>Soprano</h5>
-                            <div class="control-row">
-                                <label>Channel: <select class="midi-channel-select" data-voice="0">
-                                        <option value="1" selected>1</option>
-                                        <option value="2">2</option>
-                                        <option value="3">3</option>
-                                        <option value="4">4</option>
-                                        <option value="5">5</option>
-                                        <option value="6">6</option>
-                                        <option value="7">7</option>
-                                        <option value="8">8</option>
-                                        <option value="9">9</option>
-                                        <option value="10">10</option>
-                                        <option value="11">11</option>
-                                        <option value="12">12</option>
-                                        <option value="13">13</option>
-                                        <option value="14">14</option>
-                                        <option value="15">15</option>
-                                        <option value="16">16</option>
-                                    </select></label>
-                                <label>Volume: <input type="range" class="midi-volume-slider" data-voice="0" min="0"
-                                        max="127" value="100"> <span class="midi-volume-value">100</span></label>
-                                <label>Pan: <input type="range" class="midi-pan-slider" data-voice="0" min="0"
-                                        max="127" value="127"> <span class="midi-pan-value">127</span></label>
-                            </div>
-                        </div>
-                        <div class="voice-control" data-voice="1">
-                            <h5>Alto</h5>
-                            <div class="control-row">
-                                <label>Channel: <select class="midi-channel-select" data-voice="1">
-                                        <option value="1">1</option>
-                                        <option value="2" selected>2</option>
-                                        <option value="3">3</option>
-                                        <option value="4">4</option>
-                                        <option value="5">5</option>
-                                        <option value="6">6</option>
-                                        <option value="7">7</option>
-                                        <option value="8">8</option>
-                                        <option value="9">9</option>
-                                        <option value="10">10</option>
-                                        <option value="11">11</option>
-                                        <option value="12">12</option>
-                                        <option value="13">13</option>
-                                        <option value="14">14</option>
-                                        <option value="15">15</option>
-                                        <option value="16">16</option>
-                                    </select></label>
-                                <label>Volume: <input type="range" class="midi-volume-slider" data-voice="1" min="0"
-                                        max="127" value="100"> <span class="midi-volume-value">100</span></label>
-                                <label>Pan: <input type="range" class="midi-pan-slider" data-voice="1" min="0"
-                                        max="127" value="85"> <span class="midi-pan-value">85</span></label>
-                            </div>
-                        </div>
-                        <div class="voice-control" data-voice="2">
-                            <h5>Tenor</h5>
-                            <div class="control-row">
-                                <label>Channel: <select class="midi-channel-select" data-voice="2">
-                                        <option value="1">1</option>
-                                        <option value="2">2</option>
-                                        <option value="3" selected>3</option>
-                                        <option value="4">4</option>
-                                        <option value="5">5</option>
-                                        <option value="6">6</option>
-                                        <option value="7">7</option>
-                                        <option value="8">8</option>
-                                        <option value="9">9</option>
-                                        <option value="10">10</option>
-                                        <option value="11">11</option>
-                                        <option value="12">12</option>
-                                        <option value="13">13</option>
-                                        <option value="14">14</option>
-                                        <option value="15">15</option>
-                                        <option value="16">16</option>
-                                    </select></label>
-                                <label>Volume: <input type="range" class="midi-volume-slider" data-voice="2" min="0"
-                                        max="127" value="100"> <span class="midi-volume-value">100</span></label>
-                                <label>Pan: <input type="range" class="midi-pan-slider" data-voice="2" min="0"
-                                        max="127" value="42"> <span class="midi-pan-value">42</span></label>
-                            </div>
-                        </div>
-                        <div class="voice-control" data-voice="3">
-                            <h5>Bass</h5>
-                            <div class="control-row">
-                                <label>Channel: <select class="midi-channel-select" data-voice="3">
-                                        <option value="1">1</option>
-                                        <option value="2">2</option>
-                                        <option value="3">3</option>
-                                        <option value="4" selected>4</option>
-                                        <option value="5">5</option>
-                                        <option value="6">6</option>
-                                        <option value="7">7</option>
-                                        <option value="8">8</option>
-                                        <option value="9">9</option>
-                                        <option value="10">10</option>
-                                        <option value="11">11</option>
-                                        <option value="12">12</option>
-                                        <option value="13">13</option>
-                                        <option value="14">14</option>
-                                        <option value="15">15</option>
-                                        <option value="16">16</option>
-                                    </select></label>
-                                <label>Volume: <input type="range" class="midi-volume-slider" data-voice="3" min="0"
-                                        max="127" value="100"> <span class="midi-volume-value">100</span></label>
-                                <label>Pan: <input type="range" class="midi-pan-slider" data-voice="3" min="0"
-                                        max="127" value="0"> <span class="midi-pan-value">0</span></label>
-                            </div>
-                        </div>
+                <label class="stack">
+                    <span>Dispositivo de salida</span>
+                    <select id="midiOutputSelect">
+                        <option value="">No hay dispositivos MIDI</option>
+                    </select>
+                </label>
+                <div class="voice-grid">
+                    <div class="voice-control" data-voice="0">
+                        <h5>Soprano</h5>
+                        <label>Canal: <select class="midi-channel-select" data-voice="0"><option value="1" selected>1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option><option value="9">9</option><option value="10">10</option><option value="11">11</option><option value="12">12</option><option value="13">13</option><option value="14">14</option><option value="15">15</option><option value="16">16</option></select></label>
+                        <label>Volumen: <input type="range" class="midi-volume-slider" data-voice="0" min="0" max="127" value="100"> <span class="midi-volume-value">100</span></label>
+                        <label>Paneo: <input type="range" class="midi-pan-slider" data-voice="0" min="0" max="127" value="127"> <span class="midi-pan-value">127</span></label>
                     </div>
-                    <div class="midi-auto-pan">
-                        <button id="autoPanBtn" class="btn-quiet">Auto-Pan Voices</button>
+                    <div class="voice-control" data-voice="1">
+                        <h5>Contralto</h5>
+                        <label>Canal: <select class="midi-channel-select" data-voice="1"><option value="1">1</option><option value="2" selected>2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option><option value="9">9</option><option value="10">10</option><option value="11">11</option><option value="12">12</option><option value="13">13</option><option value="14">14</option><option value="15">15</option><option value="16">16</option></select></label>
+                        <label>Volumen: <input type="range" class="midi-volume-slider" data-voice="1" min="0" max="127" value="100"> <span class="midi-volume-value">100</span></label>
+                        <label>Paneo: <input type="range" class="midi-pan-slider" data-voice="1" min="0" max="127" value="85"> <span class="midi-pan-value">85</span></label>
+                    </div>
+                    <div class="voice-control" data-voice="2">
+                        <h5>Tenor</h5>
+                        <label>Canal: <select class="midi-channel-select" data-voice="2"><option value="1">1</option><option value="2">2</option><option value="3" selected>3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option><option value="9">9</option><option value="10">10</option><option value="11">11</option><option value="12">12</option><option value="13">13</option><option value="14">14</option><option value="15">15</option><option value="16">16</option></select></label>
+                        <label>Volumen: <input type="range" class="midi-volume-slider" data-voice="2" min="0" max="127" value="100"> <span class="midi-volume-value">100</span></label>
+                        <label>Paneo: <input type="range" class="midi-pan-slider" data-voice="2" min="0" max="127" value="42"> <span class="midi-pan-value">42</span></label>
+                    </div>
+                    <div class="voice-control" data-voice="3">
+                        <h5>Bajo</h5>
+                        <label>Canal: <select class="midi-channel-select" data-voice="3"><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4" selected>4</option><option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option><option value="9">9</option><option value="10">10</option><option value="11">11</option><option value="12">12</option><option value="13">13</option><option value="14">14</option><option value="15">15</option><option value="16">16</option></select></label>
+                        <label>Volumen: <input type="range" class="midi-volume-slider" data-voice="3" min="0" max="127" value="100"> <span class="midi-volume-value">100</span></label>
+                        <label>Paneo: <input type="range" class="midi-pan-slider" data-voice="3" min="0" max="127" value="0"> <span class="midi-pan-value">0</span></label>
                     </div>
                 </div>
-            </div>
+                <div class="midi-auto-pan">
+                    <button id="autoPanBtn" class="btn-baroque btn-quiet" type="button">Paneo automático</button>
+                </div>
+            </details>
         </div>
 
-        <div class="fleuron" aria-hidden="true">❧</div>
-        <p class="colophon">Fine &middot; Laus Deo</p>
+        <footer class="colophon">— <em>Fine al Primo Movimento</em> —</footer>
     </div>
+
     <script src="instrumentConfig.js"></script>
     <script src="sampleLoader.js"></script>
     <script src="layeredSampler.js"></script>

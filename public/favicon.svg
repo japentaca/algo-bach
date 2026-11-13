@@ -1,14 +1,41 @@
-﻿<?xml version="1.0" encoding="UTF-8"?>
-<svg width="256" height="256" xmlns="http://www.w3.org/2000/svg">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
   <defs>
-    <style>
-      .bg { fill: #1a1a2e; }
-      .note { fill: #00d4ff; }
-    </style>
+    <radialGradient id="bg" cx="50%" cy="38%" r="72%">
+      <stop offset="0%" stop-color="#7a2a3d"/>
+      <stop offset="100%" stop-color="#3d0f1d"/>
+    </radialGradient>
+    <linearGradient id="gold" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#e8c97a"/>
+      <stop offset="50%" stop-color="#d4af37"/>
+      <stop offset="100%" stop-color="#a8842a"/>
+    </linearGradient>
   </defs>
-  <rect class="bg" width="256" height="256"/>
-  <!-- Musical note -->
-  <circle class="note" cx="140" cy="160" r="20"/>
-  <rect class="note" x="135" y="30" width="10" height="135" rx="2"/>
-  <ellipse class="note" cx="115" cy="50" rx="25" ry="15" transform="rotate(-30 115 50)"/>
+
+  <rect width="64" height="64" rx="11" fill="url(#bg)"/>
+
+  <circle cx="32" cy="32" r="29" fill="none" stroke="url(#gold)" stroke-width="0.9" opacity="0.75"/>
+  <circle cx="32" cy="32" r="27" fill="none" stroke="url(#gold)" stroke-width="0.4" opacity="0.45"/>
+
+  <g stroke="url(#gold)" stroke-width="0.55" opacity="0.55" stroke-linecap="round">
+    <line x1="16" y1="20" x2="48" y2="20"/>
+    <line x1="14" y1="24" x2="50" y2="24"/>
+    <line x1="14" y1="28" x2="50" y2="28"/>
+    <line x1="14" y1="32" x2="50" y2="32"/>
+    <line x1="14" y1="36" x2="50" y2="36"/>
+    <line x1="16" y1="40" x2="48" y2="40"/>
+  </g>
+
+  <text x="33" y="40" font-family="'Times New Roman', Georgia, 'Playfair Display', serif"
+        font-size="36" font-weight="bold" text-anchor="middle"
+        fill="url(#gold)" stroke="#a8842a" stroke-width="0.25">𝄞</text>
+
+  <g fill="url(#gold)" opacity="0.85">
+    <circle cx="32" cy="50" r="1.1"/>
+  </g>
+  <g fill="#d4af37" opacity="0.75">
+    <circle cx="10" cy="10" r="0.9"/>
+    <circle cx="54" cy="10" r="0.9"/>
+    <circle cx="10" cy="54" r="0.9"/>
+    <circle cx="54" cy="54" r="0.9"/>
+  </g>
 </svg>

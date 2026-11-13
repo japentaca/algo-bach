@@ -328,7 +328,7 @@ document.addEventListener('DOMContentLoaded', () => {
   function updateSeedDisplay() {
     const seedDisplay = document.getElementById('seedDisplay');
     if (seedDisplay) {
-      seedDisplay.innerText = `Seed: ${currentSeed}`;
+      seedDisplay.innerText = `Semilla: ${currentSeed}`;
     }
   }
 
@@ -336,12 +336,12 @@ document.addEventListener('DOMContentLoaded', () => {
   // Part names per ensemble, for the labels of the row (SATB when the four voices
   // play the same instrument)
   const VOICE_LABELS = {
-    VscoStrings: ['Violin I', 'Violin II', 'Viola', 'Cello'],
-    VscoWoodwinds: ['Flute', 'Oboe', 'Clarinet', 'Bassoon'],
-    VscoBrass: ['Trumpet', 'Horn', 'Trombone', 'Bass Trombone'],
+    VscoStrings: ['Violín I', 'Violín II', 'Viola', 'Violonchelo'],
+    VscoWoodwinds: ['Flauta', 'Oboe', 'Clarinete', 'Fagot'],
+    VscoBrass: ['Trompeta', 'Trompa', 'Trombón', 'Trombón bajo'],
   };
-  const SATB = ['Soprano', 'Alto', 'Tenor', 'Bass'];
-  const VOICE_ART_NAMES = { legato: 'legato', detached: 'detached', pizzicato: 'pizzicato' };
+  const SATB = ['Soprano', 'Contralto', 'Tenor', 'Bajo'];
+  const VOICE_ART_NAMES = { legato: 'legato', detached: 'destacado', pizzicato: 'pizzicato' };
 
   function voiceLabels(styleName) {
     if (VOICE_LABELS[styleName]) return VOICE_LABELS[styleName];
@@ -369,11 +369,11 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!sel) return;
       const name = document.querySelector(`.voice-art-name[data-voice="${v}"]`);
       if (name) name.textContent = labels[v];
-      sel.setAttribute('aria-label', `Articulation of ${labels[v]} (voice ${v + 1}, ${SATB[v].toLowerCase()})`);
+      sel.setAttribute('aria-label', `Articulación de ${labels[v]} (voz ${v + 1}, ${SATB[v].toLowerCase()})`);
       const opt = sel.querySelector('option[value="pizzicato"]');
       if (opt) {
         opt.disabled = !pluck;
-        opt.title = pluck ? '' : 'Pizzicato needs an ensemble that plucks (VSCO Strings)';
+        opt.title = pluck ? '' : 'El pizzicato necesita un conjunto que pellizque (cuerdas VSCO)';
       }
       const wanted = sel.dataset.wanted || sel.value;
       sel.value = wanted === 'pizzicato' && !pluck ? 'detached' : wanted;
@@ -382,8 +382,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const hint = document.getElementById('voiceArtsHint');
     if (hint) {
       hint.textContent = pluck
-        ? 'Auto follows the Articulation above. Detached keeps long notes held.'
-        : 'Auto follows the Articulation above. Pizzicato needs VSCO Strings (a plucked voice plays detached here).';
+        ? 'Auto sigue la articulación general. Destacado mantiene las notas largas.'
+        : 'Auto sigue la articulación general. El pizzicato necesita cuerdas VSCO (aquí esa voz toca destacado).';
     }
   }
 
@@ -417,7 +417,7 @@ document.addEventListener('DOMContentLoaded', () => {
           const preset = STYLE_PRESETS[opt.value];
           if (preset && preset.engine === 'vsco') {
             opt.disabled = !available;
-            opt.title = available ? '' : 'VSCO samples not found (run npm run samples)';
+            opt.title = available ? '' : 'Faltan los samples VSCO (npm run samples)';
           }
         });
         console.log(`VSCO velocity-layered styles ${available ? 'enabled' : 'unavailable'}`);
@@ -433,7 +433,7 @@ document.addEventListener('DOMContentLoaded', () => {
           if (preset && preset.engine === 'sfz') {
             const ok = files.has(preset.sfz.file);
             opt.disabled = !ok;
-            opt.title = ok ? '' : `${preset.sfz.lib} samples not found (run npm run samples)`;
+            opt.title = ok ? '' : `Faltan los samples ${preset.sfz.lib} (npm run samples)`;
             if (ok) enabled++;
           }
         });
@@ -702,7 +702,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const pans = currentPans(styleName);
     const style = STYLE_PRESETS[styleName];
 
-    statusDiv.innerText = `Loading samples for ${style.displayName}...`;
+    statusDiv.innerText = `Cargando samples: ${style.displayName}…`;
     console.log(`Setting up samplers for style: ${styleName}`);
 
     try {
@@ -748,7 +748,7 @@ document.addEventListener('DOMContentLoaded', () => {
       return true;
     } catch (error) {
       console.error(`Error loading samplers: ${error.message}`);
-      statusDiv.innerText = `Error loading samples: ${error.message}`;
+      statusDiv.innerText = `Error al cargar samples: ${error.message}`;
       return false;
     }
   }
@@ -778,8 +778,9 @@ document.addEventListener('DOMContentLoaded', () => {
       resolve(false);
     }
 
-    statusDiv.innerText = "Stopped";
+    statusDiv.innerText = "Detenido";
     playBtn.disabled = false;
+    window.dispatchEvent(new CustomEvent('bach:stopped'));
   }
 
   /**
@@ -795,7 +796,7 @@ document.addEventListener('DOMContentLoaded', () => {
     console.log("Generate button clicked");
     const token = ++playToken;
     const superseded = () => token !== playToken;
-    statusDiv.innerText = "Initializing audio...";
+    statusDiv.innerText = "Iniciando audio…";
     playBtn.disabled = true;
 
     try {
@@ -867,6 +868,9 @@ document.addEventListener('DOMContentLoaded', () => {
       if (superseded()) return { ok: false, aborted: true };
       console.log("Data received:", data);
       console.log("Total notes:", data.notes.length);
+      // The page (ui/main.js) renders the score now, while the samples load below,
+      // so that work never lands on the first seconds of playback
+      window.dispatchEvent(new CustomEvent('bach:composed', { detail: { data, seed: currentSeed, style: currentStyle, token } }));
 
       // Get tempo from slider (default 120 BPM)
       const tempoSlider = document.getElementById('tempoSlider');
@@ -984,13 +988,13 @@ document.addEventListener('DOMContentLoaded', () => {
         ? artPlan.voiceProfiles.map((p, v) => (p !== artPlan.profile ? `${labels[v]} ${VOICE_ART_NAMES[p] || p}` : null)).filter(Boolean)
         : [];
       statusDiv.innerHTML = `
-                <strong>Playing:</strong> ${data.meta.style} in ${data.meta.key} ${data.meta.mode}<br>
-                <strong>Style:</strong> ${STYLE_PRESETS[currentStyle].displayName}<br>
-                <strong>Output:</strong> ${outputMode}<br>
-                <strong>Progression:</strong> ${data.meta.progression}<br>
-                <strong>Expressivity:</strong> ${expressivityPreset} | Random texture: ${randomTexture ? 'on' : 'off'} | Sparse cadences: ${sparseOrnaments ? 'on' : 'off'}<br>
-                <strong>Articulation:</strong> ${artPlan ? `${BachArticulation.PROFILES[artPlan.profile]}${ownVoices.length ? ` (${ownVoices.join(', ')})` : ''}${realArticulations ? '' : ' (durations only)'} — ${[...new Set(artPlan.sections.map(s => s.text))].slice(0, 6).join(' · ')}` : 'n/a'}
-                ${continuoInfo.enabled ? `<br><strong>Continuo:</strong> organ (8' principal) doubling the bass in the tutti` : ''}
+                <strong>Sonando:</strong> ${data.meta.style} · ${data.meta.key} ${data.meta.mode}<br>
+                <strong>Conjunto:</strong> ${STYLE_PRESETS[currentStyle].displayName}<br>
+                <strong>Salida:</strong> ${outputMode}<br>
+                <strong>Plan:</strong> ${data.meta.progression}<br>
+                <strong>Expresividad:</strong> ${expressivityPreset} | Textura al azar: ${randomTexture ? 'sí' : 'no'} | Cadencias sobrias: ${sparseOrnaments ? 'sí' : 'no'}<br>
+                <strong>Articulación:</strong> ${artPlan ? `${BachArticulation.PROFILES[artPlan.profile]}${ownVoices.length ? ` (${ownVoices.join(', ')})` : ''}${realArticulations ? '' : ' (solo duraciones)'} — ${[...new Set(artPlan.sections.map(s => s.text))].slice(0, 6).join(' · ')}` : 'n/a'}
+                ${continuoInfo.enabled ? `<br><strong>Continuo:</strong> órgano (principal de 8′) dobla el bajo en los tutti` : ''}
             `;
 
       const useMidiOut = isMidiEnabled();
@@ -1141,7 +1145,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (resolveFinished === settle) resolveFinished = null;
         settle(true);
         if (superseded()) return;  // a newer piece owns the UI now
-        statusDiv.innerText = "Ready";
+        statusDiv.innerText = "Listo";
         playBtn.disabled = false;
       }, durationSecs * 1000);
 
@@ -1166,7 +1170,13 @@ document.addEventListener('DOMContentLoaded', () => {
         ? { stop: continuoInfo.stop, notes: continuoInfo.planned, files: continuoInfo.files }
         : null;
 
-      return { ok: true, data, durationSecs, finished, articulation, continuo: continuoSummary, startsInSecs: 0.5 };
+      // Timing for the page: score beat b sounds at start + b * secsPerBeat on `clock`
+      // (AudioContext time for Tone output, performance.now() / 1000 for MIDI)
+      const timing = { start, secsPerBeat, clock: useMidiOut ? 'wall' : 'audio' };
+      const result = { ok: true, data, durationSecs, finished, articulation, continuo: continuoSummary, startsInSecs: 0.5,
+        seed: currentSeed, style: currentStyle, bpm, timing };
+      window.dispatchEvent(new CustomEvent('bach:playing', { detail: result }));
+      return result;
 
     } catch (e) {
       console.error(e);

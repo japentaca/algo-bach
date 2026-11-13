@@ -250,7 +250,7 @@ function updateDeviceList() {
   if (devices.length === 0) {
     const option = document.createElement('option');
     option.value = '';
-    option.textContent = 'No MIDI devices available';
+    option.textContent = 'No hay dispositivos MIDI';
     deviceSelect.appendChild(option);
   } else {
     devices.forEach(device => {
