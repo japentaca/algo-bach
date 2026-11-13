@@ -11,6 +11,7 @@
  *   bach:kiosk    {active}             -> the start button, the slideshow between pieces
  * Nothing here schedules or touches audio: the follower and the progress only read the
  * clock the player scheduled the notes on (ui/score.js).
+ * It also reports those events to Umami (track() below).
  */
 import Slideshow from './slideshow.js';
 import Score from './score.js';
@@ -62,9 +63,37 @@ function endBeats(data) {
   return (data.notes || []).reduce((m, n) => Math.max(m, n.startTime + (n.beats || 1)), 0);
 }
 
+// ---- Analytics (self-hosted Umami at stats.jape.com.ar, script tag in index.html) ----
+// Same event names and properties as barroco estocástico had, plus the ensemble:
+//   iniciar  the first piece of a concert (the Iniciar button or the ?kiosk overlay)
+//   pieza    every following concert piece, with its number n (2, 3, ...)
+//   componer a manual "Componer y tocar" (composed, before the samples load)
+//   play     every piece that starts sounding (modo: concierto | manual)
+// The tag only tracks on barroco.jape.com.ar (data-domains), so local runs send
+// nothing; if it is blocked, window.umami is undefined and this does nothing.
+let concertPieces = 0;
+function track(name, data, extra = {}) {
+  try {
+    const meta = (data && data.meta) || {};
+    window.umami?.track(name, {
+      forma: String(meta.form || '').toLowerCase(),
+      tonalidad: `${meta.key || ''} ${meta.mode || ''}`.trim(),
+      compases: Math.round(meta.bars || 0),
+      ...extra,
+    });
+  } catch (err) { /* analytics never breaks the page */ }
+}
+
 // ---- Composed: author, title, score -----------------------------------------
 window.addEventListener('bach:composed', (e) => {
   const { data, seed, style, token } = e.detail;
+  if (kioskActive) {
+    concertPieces++;
+    if (concertPieces === 1) track('iniciar', data, { conjunto: style });
+    else track('pieza', data, { conjunto: style, n: concertPieces });
+  } else {
+    track('componer', data, { conjunto: style });
+  }
   const piece = { token, seed, style, data, author: nextAuthor(), title: inventTitle(data.meta, seed) };
   composed = piece;
   const bpm = Number(($('tempoSlider') || {}).value) || 0;
@@ -103,6 +132,7 @@ window.addEventListener('bach:playing', (e) => {
   if (!piece.rendered) { score.render(result.data); piece.rendered = true; }
   const totalBeats = endBeats(result.data);
   current = { result, piece, totalBeats };
+  track('play', result.data, { conjunto: result.style, modo: kioskActive ? 'concierto' : 'manual', bpm: result.bpm });
   renderStaffHeader(piece, result.bpm);
   showPiece(piece, result);
   score.follow(result.timing);
@@ -190,6 +220,7 @@ window.addEventListener('bach:stopped', () => {
 // ---- Kiosk / start button ---------------------------------------------------------
 window.addEventListener('bach:kiosk', (e) => {
   kioskActive = !!e.detail.active;
+  if (kioskActive) concertPieces = 0;
   el.kioskLabel.textContent = kioskActive ? 'Detener' : 'Iniciar';
   el.kioskBtn.classList.toggle('playing', kioskActive);
   el.stopBtn.disabled = !kioskActive && !current;

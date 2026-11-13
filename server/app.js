@@ -1,7 +1,6 @@
 import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import * as generator from '../src/main.js';
 import { SOUNDFONTS_DIR, vscoStatus, vscoArticulation, sfzStatus, sfzFileOk, sfzInstrument } from './samples.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -40,19 +39,6 @@ app.get('/api/sfz', (req, res) => {
   res.json(detail);
 });
 
-// API routes BEFORE static middleware
-app.get('/api/generate', (req, res) => {
-  const options = req.query;
-  console.log("Received generation request:", options);
-  try {
-    const piece = generator.generatePiece(options);
-    res.json(piece);
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
 // Static files after API routes. The page itself is static (npm run dev / preview);
 // after npm run build, dist/ is served here too, so the built site works on this port.
 app.use(express.static(path.join(__dirname, '../dist')));
@@ -61,5 +47,5 @@ app.use(express.static(path.join(__dirname, '../public')));
 app.listen(port, () => {
   console.log(`Bach Generator listening at http://localhost:${port}`);
   console.log(`Built site (npm run build): http://localhost:${port}. Not needed by the site itself: npm run dev / npm run preview are static.`);
-  console.log(`API: http://localhost:${port}/api/generate?form=Chorale&mode=major&key=C&duration=2`);
+  console.log(`Live sample maps: http://localhost:${port}/api/vsco/status, /api/sfz/status (the generator runs in the page)`);
 });

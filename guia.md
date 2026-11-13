@@ -21,7 +21,7 @@ All generators return arrays of note objects:
 
 ### Main Entry Point
 ```javascript
-const Planner = require('./src/composition/planner');
+import Planner from './src/composition/planner.js';  // ES modules ("type": "module")
 const planner = new Planner();
 
 const piece = planner.generate({
@@ -33,12 +33,9 @@ const piece = planner.generate({
 });
 ```
 
-### HTTP API
-```
-GET /api/generate?form=Fugue&mode=minor&key=D&duration=30&seed=optional
-```
-
-Returns:
+### In the browser
+`src/browser.js` exposes `generatePiece` (`src/main.js`) as `window.BachGenerator.generatePiece(options)`
+(bundled by Vite; no server). It returns:
 ```javascript
 {
   notes: [...],
@@ -193,14 +190,11 @@ http://localhost:3000
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                         Frontend (public/)                       │
+│              Frontend (index.html, ui/, public/)                 │
 │   index.html ──▶ player.js ──▶ Tone.js Audio                   │
 └───────────────────────────┬─────────────────────────────────────┘
-                            │ HTTP API
+                            │ window.BachGenerator (src/browser.js)
                             ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                      Server (server/app.js)                      │
-└───────────────────────────┬─────────────────────────────────────┘
                             │
                             ▼
 ┌─────────────────────────────────────────────────────────────────┐

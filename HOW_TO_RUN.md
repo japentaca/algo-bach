@@ -41,6 +41,8 @@ npm run dev      # Vite on http://localhost:41324
 npm run build    # static site in dist/ (fails if a referenced sample is missing)
 npm run preview  # serves dist/
 npm run check:samples  # every style's manifests and samples exist in dist/
+npm run deploy -- --dry-run  # checks + build + what would be uploaded (no Cloudflare)
+npm run deploy   # publish dist/ to Cloudflare Pages: https://barroco.jape.com.ar (see CLAUDE.md)
 ```
 
 **No server is needed**: `dist/` works from any static host (Cloudflare Pages: 1282
@@ -90,7 +92,6 @@ string): `node tools/golden.mjs write <dir>` once, then `node tools/golden.mjs c
 
 The Express server (`npm run server`, :3000) is optional: it serves `dist/` and the
 live answers the manifests are built from (`/soundfonts` from carrilion's folder):
-- `GET /api/generate?form=Chorale&mode=major&key=C&duration=4`
 - `GET /api/vsco/status` → `{ available }` (VSCO 2 CE samples found in `SOUNDFONTS_DIR`)
 - `GET /api/vsco/articulation?instrument=Violin&articulation=Spiccato` → sample map and
   velocity layers of one articulation. Each sample/layer may carry `alts`: the other
@@ -359,4 +360,3 @@ Typical generation time: 30 bars ~50-150 ms, 150 bars ~0.2-1 s.
 
 - The system uses deterministic generation based on seed values
 - Each generation is reproducible with the same parameters and seed
-- The API server is stateless and can handle concurrent requests

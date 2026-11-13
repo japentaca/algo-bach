@@ -10,7 +10,8 @@
     "samples": "node tools/build-sample-manifests.mjs",
     "check:samples": "node tools/check-samples.mjs",
     "server": "node server/app.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "deploy": "node tools/deploy.mjs"
   },
   "keywords": [],
   "author": "",
@@ -23,6 +24,7 @@
   },
   "devDependencies": {
     "nodemon": "^3.1.11",
-    "vite": "^6.4.6"
+    "vite": "^6.4.6",
+    "wrangler": "^4.161.0"
   }
 }

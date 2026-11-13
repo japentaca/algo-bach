@@ -12,7 +12,7 @@ THREE WAYS TO RUN:
 
 2. PROGRAMMATIC - Use in Node.js
    ─────────────────────────────────────────────────────────────────
-   const {generatePiece} = require('./src/main');
+   import { generatePiece } from './src/main.js';   // ES modules
    const piece = generatePiece({
      form: 'Chorale',
      mode: 'major', 
@@ -20,12 +20,12 @@ THREE WAYS TO RUN:
      duration: 4
    });
 
-3. WEB SERVER - Interactive API
+3. WEB PAGE - Static site (Vite), no server needed
    ─────────────────────────────────────────────────────────────────
-   > node server/app.js
-   
-   Open: http://localhost:3000
-   API: http://localhost:3000/api/generate?form=Chorale&mode=major&key=C
+   > npm install
+   > npm run samples     (once: copies the samples from carrilion)
+   > npm run dev         (http://localhost:41324)
+   > npm run build       (static site in dist/; npm run preview serves it)
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -35,7 +35,7 @@ PARAMETERS:
             Minuet, Fugue, Passacaglia
   mode:     major or minor
   key:      C, D, E, F, G, A, B (+ accidentals: C#, Db, etc.)
-  duration: 1-8 bars
+  duration: 1-150 bars
 
 EXAMPLES:
 

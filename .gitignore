@@ -1,7 +1,19 @@
 node_modules
+dist
+*.log
+
+# wrangler's local cache (npm run deploy) and any local env/credential files: the
+# Cloudflare token lives outside the repo (tools/deploy.mjs), never here
+.wrangler/
+.env
+.env.*
+.dev.vars
+
+# Local-only audio, git-ignored (not regenerated: copy them by hand to a new clone):
+# the older one-layer samples and the reverb impulse responses. npm run deploy
+# refuses to run without them.
 public/Orchestra
 public/impulses
-dist
 
 # VSCO / VCSL samples copied from carrilion by `npm run samples` (~254 MB, MP3 + FLAC
 # as they are): regenerate, do not commit. Their maps (public/manifests/) are committed.
